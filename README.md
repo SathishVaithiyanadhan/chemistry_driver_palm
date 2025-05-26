@@ -3,6 +3,7 @@
 # Chemistry Driver (LOD2) for PALM Simulations
 
 This repository provides a modular workflow to generate chemistry drivers for the [PALM modeling system](https://gitlab.palm-model.org/releases/palm_model_system/-/releases) using downscaled GRETA emission inventories. The scripts process spatiotemporal emission data into CF-compliant NetCDF files compatible with PALM's LOD2 chemistry module.
+
 ---
 
 ## Key features
@@ -15,6 +16,7 @@ The driver integrates gridded emission data (e.g., from the GRETA inventory) wit
 - **Hourly emissions** as the input (LOD2)
 - **Emission Stack height** includes the height of the buildings (LOD2).
 - Automatic **time-step** synchronization across species based on the emission input. 
+
 ---
 
 ## Input data
@@ -27,6 +29,7 @@ The following data is required to create the chemistry driver for the PALM simul
 2. Static Data 
 	* The static data whcih you have created using the Geospatial data to descrivbbe the topography of the simulation domain. 
     * It is used here to extract the AOI and Grid details for the PALM simulation. 
+
 ---
 
 ## Usage
@@ -45,19 +48,24 @@ The following data is required to create the chemistry driver for the PALM simul
 3. Output
 
     * NetCDF file generated at: **{static_pth}/{static}_chemistry**
+
 ---
 
 ## Authors and acknowledgment
+
 Show your appreciation to those who have contributed to the project.
 For details and comments, please contact:
 1. Sathish Kumar Vaithiyanadhan (sathish.vaithiyanadhan@uni-a.de)
 2. Christoph Knote (christoph.knote@med.uni-augsburg.de)
 
 @ Chair of Model-based Environmental Exposure Science (MBEES), Faculty of Medicine, University of Augsburg, Germany.
+
 ---
 
 ## License
+
 For open source projects, say how it is licensed.
+
 ---
 
 TODO:
