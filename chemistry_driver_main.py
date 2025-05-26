@@ -1,3 +1,4 @@
+#LOD2
 import netCDF4 as nc
 import numpy as np
 from osgeo import gdal
@@ -34,7 +35,13 @@ def extract_static_parameters(static_file):
         params['dz'] = z_coords[1] - z_coords[0] if len(z_coords) > 1 else 1.0
         params['z_origin'] = z_coords[0]
         
-        # Calculate domain boundaries relative to center point
+        # Read building height data (2D array, no time dimension)
+        if 'buildings_2d' in ncs.variables:
+            params['building_height'] = ncs.variables['buildings_2d'][:, :]  # Correct 2D access
+        else:
+            params['building_height'] = np.zeros((params['ny'], params['nx']))
+        
+        # Calculate domain boundaries
         half_nx = (params['nx'] - 1) * params['dx'] / 2
         half_ny = (params['ny'] - 1) * params['dy'] / 2
         
@@ -43,11 +50,10 @@ def extract_static_parameters(static_file):
         params['south'] = center_y - half_ny
         params['north'] = center_y + half_ny
         
-        # Update origin coordinates to match PALM convention
         params['origin_x'] = params['west']
         params['origin_y'] = params['north']
         
-        # Convert boundaries back to WGS84 for reference
+        # Convert boundaries back to WGS84
         params['lon_w'], params['lat_s'] = transformer_to_wgs.transform(
             params['west'], params['south'])
         params['lon_e'], params['lat_n'] = transformer_to_wgs.transform(
@@ -84,11 +90,9 @@ def resample_geotiff(input_path, static_params, output_path=None):
     print(f"Original resolution: {src_gt[1]}m x {abs(src_gt[5])}m")
     print(f"Original CRS: {src_ds.GetProjection()}")
     
-    # Create in-memory output
     if output_path is None:
         output_path = '/vsimem/temp_resampled.tif'
     
-    # Resample using target resolution
     resampled_ds = gdal.Warp(
         output_path,
         src_ds,
@@ -109,10 +113,8 @@ def resample_geotiff(input_path, static_params, output_path=None):
     if resampled_ds is None:
         raise RuntimeError("Failed to resample GeoTIFF")
     
-    # Verify dimensions match expected
     if (resampled_ds.RasterXSize != static_params['nx'] or 
         resampled_ds.RasterYSize != static_params['ny']):
-        # If dimensions don't match, do a second warp to exact dimensions
         resampled_ds = gdal.Warp(
             '/vsimem/temp_resized.tif',
             resampled_ds,
@@ -145,6 +147,5 @@ if __name__ == "__main__":
     print(f"Resolution: {static_params['dx']}m x {static_params['dy']}m x {static_params['dz']}m")
     print(f"Z levels: {static_params['nz']} from {static_params['z_origin']}m")
 
-    # Import and execute the chemistry driver creation
     from chemistry_driver_nc import create_chemistry_driver
     create_chemistry_driver(static_params)
