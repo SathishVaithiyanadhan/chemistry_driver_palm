@@ -73,7 +73,6 @@ def create_chemistry_driver(static_params):
             'Institution': 'Chair of Model-based Environmental Exposure Science (MBEES), Faculty of Medicine, University of Augsburg, Germany.',
             'lod': 2,
             'origin_time': static_params['origin_time'],
-            'end_time': end_time_str,
             'origin_lat': static_params['origin_lat'],
             'origin_lon': static_params['origin_lon'],
             'origin_x': static_params['origin_x'],
@@ -86,12 +85,12 @@ def create_chemistry_driver(static_params):
         })
 
         # Dimensions
-        ds.createDimension('dt_emission', None)
+        ds.createDimension('time', None)
         ds.createDimension('z', static_params['nz'])
         ds.createDimension('y', static_params['ny'])
         ds.createDimension('x', static_params['nx'])
         ds.createDimension('nspecies', len(spec_name_str))
-        ds.createDimension('max_string_length', 25)
+        ds.createDimension('field_length', 64)  # Standard PALM character length
 
         # Coordinate variables
         z = ds.createVariable('z', 'f4', ('z',))
@@ -111,21 +110,22 @@ def create_chemistry_driver(static_params):
         y.setncatts({'units': 'm', 'axis': 'Y', 'long_name': 'y-distance from origin'})
 
         # Time variables
-        time = ds.createVariable('time', 'f4', ('dt_emission',))
+        time = ds.createVariable('time', 'f4', ('time',))
         time.setncatts({
             'long_name': 'time',
             'standard_name': 'time',
-            'units': 'hours since 00:00:00'
+            'units': 'h'
         })
 
-        time_name = ds.createVariable('time_name', 'S1', ('dt_emission', 'max_string_length'))
-        time_name.long_name = "time step names"
+        timestamp = ds.createVariable('timestamp', 'S1', ('time', 'field_length'))
+        timestamp.long_name = "time steps"
 
         # Emission metadata variables
-        emission_name = ds.createVariable('emission_name', 'S1', ('nspecies', 'max_string_length'))
+        emission_name = ds.createVariable('emission_name', 'S1', 
+                                         ('nspecies', 'field_length'))
         emission_name.long_name = "emission species name"
         emission_name.standard_name = "emission_name"
-        emission_name[:] = nc.stringtochar(np.array(spec_name_str, dtype='S25'))
+        emission_name[:] = nc.stringtochar(np.array(spec_name_str, dtype='S64'))
 
         emission_index = ds.createVariable('emission_index', 'u2', ('nspecies',))
         emission_index.long_name = "emission species index"
@@ -134,7 +134,7 @@ def create_chemistry_driver(static_params):
 
         # Main emission data
         emission_values = ds.createVariable('emission_values', 'f4', 
-                                          ('dt_emission', 'z', 'y', 'x', 'nspecies'),
+                                          ('time', 'z', 'y', 'x', 'nspecies'),
                                           fill_value=-9999.9)
         emission_values.setncatts({
             'long_name': 'emission species values',
@@ -168,8 +168,8 @@ def create_chemistry_driver(static_params):
             for ts_idx, ts in enumerate(time_steps):
                 # Initialize time variables
                 time[ts_idx] = ts['hour_num']
-                time_name[ts_idx] = nc.stringtochar(np.array(
-                    f"{ts['date']}_{ts['hour']}".ljust(25), dtype='S25'))
+                timestamp[ts_idx] = nc.stringtochar(np.array(
+                    f"{ts['date']}_{ts['hour']}".ljust(64), dtype='S64'))
                 
                 # Aggregate emissions across categories
                 total_emission = np.zeros((static_params['ny'], static_params['nx']))

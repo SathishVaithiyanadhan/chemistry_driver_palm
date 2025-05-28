@@ -25,7 +25,7 @@ static = 'Augsburg_konig'
 active_categories = [
       #'A_PublicPower', 
     #'B_Industry', 
-    'C_OtherStationaryComb', 
+    #'C_OtherStationaryComb', 
     #'D_Fugitives',
     #'E_Solvents', 
     'F_RoadTransport', 
@@ -38,9 +38,10 @@ active_categories = [
     #'SumAllSectors'
 ]
 cat_name_str = tuple(active_categories)
-cat_name = np.array(cat_name_str, dtype='S25')
+cat_name = np.array(cat_name_str, dtype='S64')
 
 # Chemical species configuration
-spec_name_str = ('n2o', 'nox', 'nmvoc', 'so2', 'co', 'pm10', 'pm2_5', 'nh3', 
-                'pb', 'cd', 'hg', 'as', 'ni', 'bc', 'co2', 'ch4')
-spec_name = np.array(spec_name_str, dtype='S25')
+spec_name_str = ('pm10',)
+#spec_name_str = ('n2o', 'nox', 'nmvoc', 'so2', 'co', 'pm10', 'pm2_5', 'nh3', 
+                #'pb', 'cd', 'hg', 'as', 'ni', 'bc', 'co2', 'ch4')
+spec_name = np.array(spec_name_str, dtype='S64')
