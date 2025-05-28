@@ -1,10 +1,12 @@
-# chemistry_driver_palm
-
 # Chemistry Driver (LOD2) for PALM Simulations
 
 This repository provides a modular workflow to generate chemistry drivers for the [PALM modeling system](https://gitlab.palm-model.org/releases/palm_model_system/-/releases) using downscaled GRETA emission inventories. The scripts process spatiotemporal emission data into CF-compliant NetCDF files compatible with PALM's LOD2 chemistry module.
 
 ---
+
+# Attributes and Dimensions
+
+To setup the attributes and the dimenions for the chemistry driver based on PIDS, follow the latest Anthropogenic Emissions Model documentation in [Anthropogenic Emissions Model](https://docs.palm-model.com/23.10-rc.1/Guide/LES_Model/Modules/Chemistry/CS_model/#temporal-emission-profiles). This chemistry driver follows the PIDS for the PALM version 25.04. 
 
 ## Key features
 
