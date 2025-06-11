@@ -40,6 +40,42 @@ def create_time_dimensions(time_info):
 def create_chemistry_driver(static_params):
     print("\nCreating PALM LOD2 Chemistry Driver")
     
+    # Define species name mapping to uppercase format
+    species_mapping = {
+        'n2o': 'N2O',
+        'nox': 'NOX',
+        'nmvoc': 'NMVOC',
+        'so2': 'SO2',
+        'co': 'CO',
+        'pm10': 'PM10',
+        'pm2_5': 'PM25',
+        'nh3': 'NH3',
+        'pb': 'PB',
+        'cd': 'CD',
+        'hg': 'HG',
+        'as': 'AS',
+        'ni': 'NI',
+        'bc': 'BC',
+        'co2': 'CO2',
+        'ch4': 'CH4',
+        'no': 'NO',
+        'no2': 'NO2',
+        'ec': 'EC',
+        'na': 'NA',
+        'so4': 'SO4',
+        'oc': 'OC',
+        'othmin': 'OTHMIN'
+    }
+    
+    # Convert species names to uppercase format
+    uppercase_spec_names = []
+    for spec in spec_name_str:
+        if spec in species_mapping:
+            uppercase_spec_names.append(species_mapping[spec])
+        else:
+            # Default conversion: uppercase and replace '_' with ''
+            uppercase_spec_names.append(spec.upper().replace('_', ''))
+            
     # Collect temporal emission data
     all_time_info = {}
     for spec in spec_name_str:
@@ -109,25 +145,28 @@ def create_chemistry_driver(static_params):
         y[:] = np.linspace(static_params['south'], static_params['north'], static_params['ny'])
         y.setncatts({'units': 'm', 'axis': 'Y', 'long_name': 'y-distance from origin'})
 
-        # Time variables
-        time = ds.createVariable('time', 'f4', ('time',))
+        # Time variables (modified to use integer type)
+        time = ds.createVariable('time', 'i4', ('time',))
         time.setncatts({
             'long_name': 'time',
             'standard_name': 'time',
             'units': 'h'
         })
 
+        # Timestamp with new attribute name
         timestamp = ds.createVariable('timestamp', 'S1', ('time', 'field_length'))
-        timestamp.long_name = "time steps"
+        timestamp.long_name = "time stamp"
 
         # Emission metadata variables
         emission_name = ds.createVariable('emission_name', 'S1', 
                                          ('nspecies', 'field_length'))
         emission_name.long_name = "emission species name"
         emission_name.standard_name = "emission_name"
-        emission_name[:] = nc.stringtochar(np.array(spec_name_str, dtype='S64'))
+        emission_name[:] = nc.stringtochar(np.array(uppercase_spec_names, dtype='S64'))
 
-        emission_index = ds.createVariable('emission_index', 'u2', ('nspecies',))
+        # Emission index with float type and fill value
+        emission_index = ds.createVariable('emission_index', 'f4', ('nspecies',),
+                                         fill_value=-9999.9)
         emission_index.long_name = "emission species index"
         emission_index.standard_name = "emission_index"
         emission_index[:] = np.arange(len(spec_name_str))
