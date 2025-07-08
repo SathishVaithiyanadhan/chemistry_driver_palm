@@ -1,4 +1,4 @@
-# Chemistry Driver (LOD2) for PALM Simulations
+# Chemistry Driver (LOD2) from GRETA emission inventroy for PALM Simulations
 
 This repository provides a modular workflow to generate chemistry drivers for the [PALM modeling system](https://gitlab.palm-model.org/releases/palm_model_system/-/releases) using downscaled GRETA emission inventories. The scripts process spatiotemporal emission data into CF-compliant NetCDF files compatible with PALM's LOD2 chemistry module.
 
