@@ -1,4 +1,4 @@
-#LOD2
+#NAN
 import os
 import re
 import numpy as np
@@ -64,7 +64,8 @@ def create_chemistry_driver(static_params):
         'na': 'NA',
         'so4': 'SO4',
         'oc': 'OC',
-        'othmin': 'OTHMIN'
+        'othmin': 'OTHMIN',
+        'o3' : 'O3'
     }
     
     # Convert species names to uppercase format
@@ -73,7 +74,6 @@ def create_chemistry_driver(static_params):
         if spec in species_mapping:
             uppercase_spec_names.append(species_mapping[spec])
         else:
-            # Default conversion: uppercase and replace '_' with ''
             uppercase_spec_names.append(spec.upper().replace('_', ''))
             
     # Collect temporal emission data
@@ -97,8 +97,8 @@ def create_chemistry_driver(static_params):
     
     # Remove duplicates, sort, and get latest time
     unique_dts = sorted(list(set(all_time_steps))) if all_time_steps else []
-    end_time_str = unique_dts[-1].strftime("%Y-%m-%d %H:%M:%S UTC") if unique_dts else "N/A"
-    current_time = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    end_time_str = unique_dts[-1].strftime("%Y-%m-%d %H:%M:%S +000") if unique_dts else "N/A"
+    current_time = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S +000")
 
     # Create NetCDF dataset
     with nc.Dataset(f"{static_pth}{static}_chemistry", 'w') as ds:
@@ -145,7 +145,11 @@ def create_chemistry_driver(static_params):
         y[:] = np.linspace(static_params['south'], static_params['north'], static_params['ny'])
         y.setncatts({'units': 'm', 'axis': 'Y', 'long_name': 'y-distance from origin'})
 
-        # Time variables (modified to use integer type)
+        nspecies_var = ds.createVariable('nspecies', 'i4', ('nspecies',))
+        nspecies_var[:] = np.arange(1, len(spec_name_str) + 1)  # Start from 1
+        nspecies_var.long_name = "nspecies"
+
+        # Time variables
         time = ds.createVariable('time', 'i4', ('time',))
         time.setncatts({
             'long_name': 'time',
@@ -153,7 +157,6 @@ def create_chemistry_driver(static_params):
             'units': 'h'
         })
 
-        # Timestamp with new attribute name
         timestamp = ds.createVariable('timestamp', 'S1', ('time', 'field_length'))
         timestamp.long_name = "time stamp"
 
@@ -164,39 +167,44 @@ def create_chemistry_driver(static_params):
         emission_name.standard_name = "emission_name"
         emission_name[:] = nc.stringtochar(np.array(uppercase_spec_names, dtype='S64'))
 
-        # Emission index with float type and fill value
         emission_index = ds.createVariable('emission_index', 'f4', ('nspecies',),
                                          fill_value=-9999.9)
         emission_index.long_name = "emission species index"
         emission_index.standard_name = "emission_index"
-        emission_index[:] = np.arange(len(spec_name_str))
+        emission_index[:] = np.arange(1, len(spec_name_str) + 1)  # Start from 1
 
-        # Main emission data
+        # Main emission data with NaN handling
         emission_values = ds.createVariable('emission_values', 'f4', 
                                           ('time', 'z', 'y', 'x', 'nspecies'),
-                                          fill_value=-9999.9)
+                                          fill_value=np.float32(-9999.9))
         emission_values.setncatts({
             'long_name': 'emission species values',
             'standard_name': 'emission_values',
             'units': 'kg/m2/hour',
             'coordinates': 'E_UTM N_UTM lon lat',
-            'grid_mapping': 'crsUTM: E_UTM N_UTM crsETRS: lon lat'
+            'grid_mapping': 'crsUTM: E_UTM N_UTM crsETRS: lon lat',
+            'missing_value': np.float32(-9999.9)
         })
 
         # Stack height (building-based)
         stack_height = ds.createVariable('emission_stack_height', 'f4', ('y', 'x'),
-                                        fill_value=-9999.9)
+                                        fill_value=np.float32(-9999.9))
         stack_height.setncatts({
             'long_name': 'emission stack height',
             'standard_name': 'emission_stack_height',
             'units': 'm',
             'coordinates': 'E_UTM N_UTM lon lat',
-            'grid_mapping': 'crsUTM: E_UTM N_UTM crsETRS: lon lat'
+            'grid_mapping': 'crsUTM: E_UTM N_UTM crsETRS: lon lat',
+            'missing_value': np.float32(-9999.9)
         })
         stack_height[:] = np.where(static_params['building_height'] > 0,
-                                 static_params['building_height'], -9999.9)
+                                 static_params['building_height'], np.float32(-9999.9))
+        
+        for var in ds.variables:
+            if "_ChunkSizes" in ds.variables[var].__dict__:
+               del ds.variables[var]._ChunkSizes
 
-        # Process emissions data
+        # Process emissions data with NaN preservation
         for spec_idx, spec in enumerate(spec_name_str):
             if spec not in all_time_info: continue
             
@@ -207,18 +215,29 @@ def create_chemistry_driver(static_params):
             for ts_idx, ts in enumerate(time_steps):
                 # Initialize time variables
                 time[ts_idx] = ts['hour_num']
-                timestamp[ts_idx] = nc.stringtochar(np.array(
-                    f"{ts['date']}_{ts['hour']}".ljust(64), dtype='S64'))
+                
+                # Convert input format to output format
+                dt = datetime.datetime.strptime(ts['date'], "%Y%m%d") + datetime.timedelta(hours=ts['hour_num'])
+                formatted_timestamp = dt.strftime("%Y-%m-%d %H:%M:%S +000")
+                timestamp[ts_idx] = nc.stringtochar(np.array(formatted_timestamp.ljust(64), dtype='S64'))
+                
+                # Initialize output array with fill values
+                total_emission = np.full((static_params['ny'], static_params['nx']), np.float32(-9999.9))
                 
                 # Aggregate emissions across categories
-                total_emission = np.zeros((static_params['ny'], static_params['nx']))
                 for band in time_info[ts['date']][ts['hour']]:
                     arr = read_geotiff_band(
                         f"{emis_geotiff_pth}emission_{spec}_temporal.tif",
                         band['band_num'],
                         static_params
                     )
-                    total_emission += np.nan_to_num(arr, nan=0.0)
+                    # Preserve NaN values from input
+                    valid_mask = ~np.isnan(arr)
+                    total_emission[valid_mask] = np.where(
+                        total_emission[valid_mask] == np.float32(-9999.9),
+                        arr[valid_mask],
+                        total_emission[valid_mask] + arr[valid_mask]
+                    )
                 
                 emission_values[ts_idx, 0, :, :, spec_idx] = total_emission
 

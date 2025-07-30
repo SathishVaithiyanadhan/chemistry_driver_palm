@@ -18,6 +18,7 @@ The driver integrates gridded emission data (e.g., from the GRETA inventory) wit
 - **Hourly emissions** as the input (LOD2)
 - **Emission Stack height** includes the height of the buildings (LOD2).
 - Automatic **time-step** synchronization across species based on the emission input. 
+- Properly handling the NAN values.
 
 ---
 
