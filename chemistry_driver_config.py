@@ -17,9 +17,9 @@ transformer_to_utm = Transformer.from_crs(default_proj, config_proj, always_xy=T
 transformer_to_wgs = Transformer.from_crs(config_proj, default_proj, always_xy=True)
 
 # Path configurations
-emis_geotiff_pth = '/home/vaithisa/Downscale_Emissions/Downscale_Winter/'  #Small_area_Emissions_Yearly/'
+emis_geotiff_pth = '/home/vaithisa/Downscale_Emissions/Downscale_Winter_10m/'  #Small_area_Emissions_Yearly/'
 static_pth = '/home/vaithisa/GEO4PALM-main/JOBS/Augsburg_3/OUTPUT/'
-static = 'Augsburg_H'
+static = 'Augsburg_3'
 
 # Active emission categories (edit these to select sectors)
 active_categories = [
@@ -28,7 +28,7 @@ active_categories = [
     'C_OtherStationaryComb', 
     #'D_Fugitives',
     #'E_Solvents', 
-    'F_RoadTransport', 
+    #'F_RoadTransport', 
     #'G_Shipping', 
     #'H_Aviation',
     'I_OffRoad', 

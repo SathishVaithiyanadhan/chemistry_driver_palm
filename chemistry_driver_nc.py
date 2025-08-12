@@ -1,4 +1,3 @@
-#NAN
 import os
 import re
 import numpy as np
@@ -154,7 +153,7 @@ def create_chemistry_driver(static_params):
         time.setncatts({
             'long_name': 'time',
             'standard_name': 'time',
-            'units': 'h'
+            'units': 'hours since first timestamp'
         })
 
         timestamp = ds.createVariable('timestamp', 'S1', ('time', 'field_length'))
@@ -213,11 +212,11 @@ def create_chemistry_driver(static_params):
             time_steps = create_time_dimensions(time_info)
             
             for ts_idx, ts in enumerate(time_steps):
-                # Initialize time variables
-                time[ts_idx] = ts['hour_num']
+                # Time index starts at 1 (ts_idx + 1)
+                time[ts_idx] = ts_idx + 1
                 
-                # Convert input format to output format
-                dt = datetime.datetime.strptime(ts['date'], "%Y%m%d") + datetime.timedelta(hours=ts['hour_num'])
+                # Create timestamp - subtract 1 hour from the original time to shift from 01:00:00 to 00:00:00
+                dt = datetime.datetime.strptime(ts['date'], "%Y%m%d") + datetime.timedelta(hours=ts['hour_num'] - 1)
                 formatted_timestamp = dt.strftime("%Y-%m-%d %H:%M:%S +000")
                 timestamp[ts_idx] = nc.stringtochar(np.array(formatted_timestamp.ljust(64), dtype='S64'))
                 
