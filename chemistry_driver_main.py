@@ -1,11 +1,13 @@
-#LOD2
 import netCDF4 as nc
 import numpy as np
 from osgeo import gdal
-from chemistry_driver_config import *
 import re
 import os
 from collections import defaultdict
+from chemistry_driver_config import *
+
+# Initialize global cache
+_geotiff_cache = {}
 
 def extract_static_parameters(static_file):
     """Extract domain parameters from static driver file"""
@@ -30,25 +32,25 @@ def extract_static_parameters(static_file):
         y_coords = ncs.variables['y'][:]
         z_coords = ncs.variables['z'][:] if 'z' in ncs.variables else np.array([0])
         
-        params['dx'] = x_coords[1] - x_coords[0] if len(x_coords) > 1 else 1.0
-        params['dy'] = abs(y_coords[1] - y_coords[0]) if len(y_coords) > 1 else 1.0
-        params['dz'] = z_coords[1] - z_coords[0] if len(z_coords) > 1 else 1.0
-        params['z_origin'] = z_coords[0]
+        params['dx'] = float(x_coords[1] - x_coords[0]) if len(x_coords) > 1 else 1.0
+        params['dy'] = float(abs(y_coords[1] - y_coords[0])) if len(y_coords) > 1 else 1.0
+        params['dz'] = float(z_coords[1] - z_coords[0]) if len(z_coords) > 1 else 1.0
+        params['z_origin'] = float(z_coords[0])
         
-        # Read building height data (2D array, no time dimension)
+        # Read building height data
         if 'buildings_2d' in ncs.variables:
-            params['building_height'] = ncs.variables['buildings_2d'][:, :]  # Correct 2D access
+            params['building_height'] = ncs.variables['buildings_2d'][:, :].astype(np.float32)
         else:
-            params['building_height'] = np.zeros((params['ny'], params['nx']))
+            params['building_height'] = np.zeros((params['ny'], params['nx']), dtype=np.float32)
         
         # Calculate domain boundaries
         half_nx = (params['nx'] - 1) * params['dx'] / 2
         half_ny = (params['ny'] - 1) * params['dy'] / 2
         
-        params['west'] = center_x - half_nx
-        params['east'] = center_x + half_nx
-        params['south'] = center_y - half_ny
-        params['north'] = center_y + half_ny
+        params['west'] = float(center_x - half_nx)
+        params['east'] = float(center_x + half_nx)
+        params['south'] = float(center_y - half_ny)
+        params['north'] = float(center_y + half_ny)
         
         params['origin_x'] = params['west']
         params['origin_y'] = params['north']
@@ -61,77 +63,81 @@ def extract_static_parameters(static_file):
             
     return params
 
-def read_geotiff_band(geotiff_path, band_num, static_params):
-    """Read and properly orient a single band from GeoTIFF"""
+def resample_entire_geotiff(geotiff_path, static_params):
+    """Resample entire GeoTIFF once and cache it - MAJOR PERFORMANCE BOOST"""
+    global _geotiff_cache
+    
+    if geotiff_path in _geotiff_cache:
+        return _geotiff_cache[geotiff_path]
+    
     if not os.path.exists(geotiff_path):
         raise FileNotFoundError(f"GeoTIFF file not found: {geotiff_path}")
     
-    resampled_ds = resample_geotiff(geotiff_path, static_params)
-    band = resampled_ds.GetRasterBand(band_num)
-    arr = band.ReadAsArray()
-    arr = np.flipud(arr)  # Match PALM's coordinate system
+    print(f"  Resampling entire file: {os.path.basename(geotiff_path)}")
     
-    if arr.shape != (static_params['ny'], static_params['nx']):
-        raise ValueError(f"Resampled dimensions {arr.shape} don't match expected "
-                       f"({static_params['ny']}, {static_params['nx']})")
+    # Resample entire file to match static grid
+    output_path = '/vsimem/resampled_entire.tif'
     
-    resampled_ds = None
-    return arr
-
-def resample_geotiff(input_path, static_params, output_path=None):
-    """Resample GeoTIFF to exactly match static driver grid"""
-    src_ds = gdal.Open(input_path)
-    if src_ds is None:
-        raise ValueError(f"Could not open GeoTIFF file: {input_path}")
-    
-    print("\nInput GeoTIFF Information:")
-    src_gt = src_ds.GetGeoTransform()
-    print(f"Dimensions: {src_ds.RasterXSize} x {src_ds.RasterYSize}")
-    print(f"Original resolution: {src_gt[1]}m x {abs(src_gt[5])}m")
-    print(f"Original CRS: {src_ds.GetProjection()}")
-    
-    if output_path is None:
-        output_path = '/vsimem/temp_resampled.tif'
-    
+    # Single warp operation for entire file
     resampled_ds = gdal.Warp(
         output_path,
-        src_ds,
+        geotiff_path,
         format='GTiff',
         outputBounds=[
             static_params['west'],
             static_params['south'],
-            static_params['east'],
+            static_params['east'], 
             static_params['north']
         ],
-        xRes=static_params['dx'],
-        yRes=static_params['dy'],
-        resampleAlg=gdal.GRA_NearestNeighbour,
+        width=static_params['nx'],
+        height=static_params['ny'],
         dstSRS=config_proj,
-        targetAlignedPixels=True
+        resampleAlg=gdal.GRA_NearestNeighbour
     )
     
     if resampled_ds is None:
-        raise RuntimeError("Failed to resample GeoTIFF")
+        raise RuntimeError(f"Failed to resample GeoTIFF: {geotiff_path}")
     
-    if (resampled_ds.RasterXSize != static_params['nx'] or 
-        resampled_ds.RasterYSize != static_params['ny']):
-        resampled_ds = gdal.Warp(
-            '/vsimem/temp_resized.tif',
-            resampled_ds,
-            format='GTiff',
-            width=static_params['nx'],
-            height=static_params['ny'],
-            resampleAlg=gdal.GRA_NearestNeighbour
-        )
+    # Read ALL bands at once into memory
+    num_bands = resampled_ds.RasterCount
+    all_bands_data = []
     
-    print("\nResampled GeoTIFF Information:")
-    print(f"Dimensions: {resampled_ds.RasterXSize} x {resampled_ds.RasterYSize}")
-    print(f"New resolution: {static_params['dx']}m x {static_params['dy']}m")
-    print(f"Output extent (UTM):")
-    print(f"  West-East: {static_params['west']:.2f}m - {static_params['east']:.2f}m")
-    print(f"  South-North: {static_params['south']:.2f}m - {static_params['north']:.2f}m")
+    for band_num in range(1, num_bands + 1):
+        band = resampled_ds.GetRasterBand(band_num)
+        arr = band.ReadAsArray().astype(np.float32)
+        arr = np.flipud(arr)  # Match PALM's coordinate system
+        all_bands_data.append(arr)
     
-    return resampled_ds
+    # Cache the entire dataset
+    _geotiff_cache[geotiff_path] = all_bands_data
+    
+    # Clean up
+    resampled_ds = None
+    
+    return all_bands_data
+
+def read_geotiff_band(geotiff_path, band_num, static_params):
+    """reading bands - uses pre-resampled cached data"""
+    global _geotiff_cache
+    
+    # Get or create cached resampled data
+    if geotiff_path not in _geotiff_cache:
+        all_bands = resample_entire_geotiff(geotiff_path, static_params)
+    else:
+        all_bands = _geotiff_cache[geotiff_path]
+    
+    # Return the specific band (band_num is 1-indexed in GDAL)
+    if band_num - 1 < len(all_bands):
+        return all_bands[band_num - 1].copy()
+    else:
+        raise ValueError(f"Band {band_num} not found in {geotiff_path}")
+
+def clear_geotiff_cache():
+    """Clear the cache to free memory"""
+    global _geotiff_cache
+    _geotiff_cache.clear()
+    import gc
+    gc.collect()
 
 if __name__ == "__main__":
     print('\nExtracting static driver parameters')
@@ -141,11 +147,8 @@ if __name__ == "__main__":
         raise RuntimeError(f"Failed to read static driver: {str(e)}")
 
     print("\nStatic Driver Configuration:")
-    print(f"Center (WGS84): {static_params['origin_lat']:.6f}°N, {static_params['origin_lon']:.6f}°E")
-    print(f"Center (UTM): {static_params['origin_x']:.2f}m, {static_params['origin_y']:.2f}m")
     print(f"Grid: {static_params['nx']}x{static_params['ny']}x{static_params['nz']}")
     print(f"Resolution: {static_params['dx']}m x {static_params['dy']}m x {static_params['dz']}m")
-    print(f"Z levels: {static_params['nz']} from {static_params['z_origin']}m")
 
     from chemistry_driver_nc import create_chemistry_driver
     create_chemistry_driver(static_params)

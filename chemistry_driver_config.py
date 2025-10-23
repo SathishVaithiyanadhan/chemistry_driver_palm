@@ -17,31 +17,35 @@ transformer_to_utm = Transformer.from_crs(default_proj, config_proj, always_xy=T
 transformer_to_wgs = Transformer.from_crs(config_proj, default_proj, always_xy=True)
 
 # Path configurations
-emis_geotiff_pth = '/home/vaithisa/Downscale_Emissions/Downscale_Winter_10m/'  #Small_area_Emissions_Yearly/'
-static_pth = '/home/vaithisa/GEO4PALM-main/JOBS/Augsburg_3/OUTPUT/'
-static = 'Augsburg_3'
+emis_geotiff_pth = '/mnt/t/PhD_data/Downscale_Augsburg_center_10m_2022/'  #Small_area_Emissions_Yearly/'
+static_pth = '/home/vaithisa/GEO4PALM-main/JOBS/Augs_Bourges_Platz/OUTPUT/'  #/home/vaithisa/palm_model_system-v25.04/palm_model_system-v25.04/JOBS/Augsburg_passive/INPUT/Augsburg_passive_static"
+static = 'Augs_Bourges_Platz'
 
 # Active emission categories (edit these to select sectors)
 active_categories = [
     'A_PublicPower', 
     'B_Industry', 
     'C_OtherStationaryComb', 
-    #'D_Fugitives',
-    #'E_Solvents', 
+    'D_Fugitives',
+    'E_Solvents', 
     #'F_RoadTransport', 
-    #'G_Shipping', 
-    #'H_Aviation',
+    'G_Shipping', 
+    'H_Aviation',
     'I_OffRoad', 
     'J_Waste', 
-    #'K_AgriLivestock', 
-    #'L_AgriOther',
+    'K_AgriLivestock', 
+    'L_AgriOther',
     #'SumAllSectors'
 ]
 cat_name_str = tuple(active_categories)
 cat_name = np.array(cat_name_str, dtype='S64')
 
 # Chemical species configuration
-spec_name_str = ('pm10','no', 'no2', 'o3')
+spec_name_str = ('pm10','pm2_5')
+#spec_name_str = ('pm10','no', 'no2', 'o3')
 #spec_name_str = ('n2o', 'nox', 'nmvoc', 'so2', 'co', 'pm10', 'pm2_5', 'nh3', 
                 #'pb', 'cd', 'hg', 'as', 'ni', 'bc', 'co2', 'ch4', 'no', 'no2', 'ec', 'oc', 'na', 'so4', 'othmin')
 spec_name = np.array(spec_name_str, dtype='S64')
+
+# Global cache for entire resampled GeoTIFFs
+_geotiff_cache = {}
