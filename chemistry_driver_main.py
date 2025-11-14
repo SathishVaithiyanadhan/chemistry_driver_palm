@@ -1,16 +1,18 @@
 import netCDF4 as nc
 import numpy as np
 from osgeo import gdal
-import re
 import os
-from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+import multiprocessing as mp
 from chemistry_driver_config import *
 
-# Initialize global cache
+# Initialize global cache with LRU behavior
 _geotiff_cache = {}
+_cache_order = []
+_MAX_CACHE_SIZE = 5  # Keep only 5 files in memory
 
 def extract_static_parameters(static_file):
-    """Extract domain parameters from static driver file"""
+    """Ultra-fast static parameter extraction with minimal operations"""
     with nc.Dataset(static_file, "r") as ncs:
         params = {}
         
@@ -37,7 +39,7 @@ def extract_static_parameters(static_file):
         params['dz'] = float(z_coords[1] - z_coords[0]) if len(z_coords) > 1 else 1.0
         params['z_origin'] = float(z_coords[0])
         
-        # Read building height data
+        # Read building height data - single operation
         if 'buildings_2d' in ncs.variables:
             params['building_height'] = ncs.variables['buildings_2d'][:, :].astype(np.float32)
         else:
@@ -64,41 +66,38 @@ def extract_static_parameters(static_file):
     return params
 
 def resample_entire_geotiff(geotiff_path, static_params):
-    """Resample entire GeoTIFF once and cache it - MAJOR PERFORMANCE BOOST"""
-    global _geotiff_cache
+    """Ultra-fast GeoTIFF resampling with optimized GDAL operations"""
+    global _geotiff_cache, _cache_order
     
     if geotiff_path in _geotiff_cache:
+        # Move to front of LRU
+        _cache_order.remove(geotiff_path)
+        _cache_order.insert(0, geotiff_path)
         return _geotiff_cache[geotiff_path]
     
     if not os.path.exists(geotiff_path):
         raise FileNotFoundError(f"GeoTIFF file not found: {geotiff_path}")
     
-    print(f"  Resampling entire file: {os.path.basename(geotiff_path)}")
+    print(f"  Resampling: {os.path.basename(geotiff_path)}")
     
-    # Resample entire file to match static grid
-    output_path = '/vsimem/resampled_entire.tif'
-    
-    # Single warp operation for entire file
-    resampled_ds = gdal.Warp(
-        output_path,
-        geotiff_path,
-        format='GTiff',
-        outputBounds=[
-            static_params['west'],
-            static_params['south'],
-            static_params['east'], 
-            static_params['north']
-        ],
+    # Optimized warp options for maximum speed - SIMPLIFIED version
+    warp_options = gdal.WarpOptions(
+        format='MEM',
+        outputBounds=[static_params['west'], static_params['south'], 
+                     static_params['east'], static_params['north']],
         width=static_params['nx'],
         height=static_params['ny'],
         dstSRS=config_proj,
         resampleAlg=gdal.GRA_NearestNeighbour
+        # Remove unsupported parameters: multithread, warpMemoryLimit, threads
     )
+    
+    resampled_ds = gdal.Warp('', geotiff_path, options=warp_options)
     
     if resampled_ds is None:
         raise RuntimeError(f"Failed to resample GeoTIFF: {geotiff_path}")
     
-    # Read ALL bands at once into memory
+    # Read all bands efficiently
     num_bands = resampled_ds.RasterCount
     all_bands_data = []
     
@@ -108,8 +107,13 @@ def resample_entire_geotiff(geotiff_path, static_params):
         arr = np.flipud(arr)  # Match PALM's coordinate system
         all_bands_data.append(arr)
     
-    # Cache the entire dataset
+    # Cache management with LRU
+    if len(_cache_order) >= _MAX_CACHE_SIZE:
+        oldest = _cache_order.pop()
+        del _geotiff_cache[oldest]
+    
     _geotiff_cache[geotiff_path] = all_bands_data
+    _cache_order.insert(0, geotiff_path)
     
     # Clean up
     resampled_ds = None
@@ -117,7 +121,7 @@ def resample_entire_geotiff(geotiff_path, static_params):
     return all_bands_data
 
 def read_geotiff_band(geotiff_path, band_num, static_params):
-    """reading bands - uses pre-resampled cached data"""
+    """Ultra-fast band reading with cache optimization"""
     global _geotiff_cache
     
     # Get or create cached resampled data
@@ -128,16 +132,63 @@ def read_geotiff_band(geotiff_path, band_num, static_params):
     
     # Return the specific band (band_num is 1-indexed in GDAL)
     if band_num - 1 < len(all_bands):
-        return all_bands[band_num - 1].copy()
+        return all_bands[band_num - 1]
     else:
         raise ValueError(f"Band {band_num} not found in {geotiff_path}")
 
 def clear_geotiff_cache():
     """Clear the cache to free memory"""
-    global _geotiff_cache
+    global _geotiff_cache, _cache_order
     _geotiff_cache.clear()
+    _cache_order.clear()
     import gc
     gc.collect()
+
+def process_species_emissions_sequential(spec, spec_idx, static_params, all_time_info, time_steps):
+    """Process emissions for a single species - sequential version"""
+    print(f"  Processing {spec}...")
+    species_emissions = np.full((len(time_steps), static_params['ny'], static_params['nx']), 
+                               np.float32(-9999.9))
+    
+    if spec not in all_time_info:
+        return spec_idx, species_emissions
+    
+    time_info = all_time_info[spec]
+    
+    for ts_idx, ts in enumerate(time_steps):
+        date_key = ts['date']
+        hour_key = ts['hour']
+        
+        if date_key not in time_info or hour_key not in time_info[date_key]:
+            continue
+        
+        # Initialize with fill values
+        total_emission = np.full((static_params['ny'], static_params['nx']), 
+                               np.float32(-9999.9))
+        
+        # Aggregate emissions
+        bands = time_info[date_key][hour_key]
+        for band in bands:
+            arr = read_geotiff_band(
+                f"{emis_geotiff_pth}emission_{spec}_temporal.tif",
+                band['band_num'],
+                static_params
+            )
+            
+            # Vectorized aggregation with unit conversion
+            valid_mask = ~np.isnan(arr)
+            fill_mask = (total_emission == np.float32(-9999.9)) & valid_mask
+            add_mask = valid_mask & ~fill_mask
+            
+            # Convert from kg/m2/hour to g/m2/s
+            arr_g_per_sec = arr * (1000.0 / 3600.0)
+            
+            total_emission[fill_mask] = arr_g_per_sec[fill_mask]
+            total_emission[add_mask] += arr_g_per_sec[add_mask]
+        
+        species_emissions[ts_idx] = total_emission
+    
+    return spec_idx, species_emissions
 
 if __name__ == "__main__":
     print('\nExtracting static driver parameters')
@@ -149,6 +200,7 @@ if __name__ == "__main__":
     print("\nStatic Driver Configuration:")
     print(f"Grid: {static_params['nx']}x{static_params['ny']}x{static_params['nz']}")
     print(f"Resolution: {static_params['dx']}m x {static_params['dy']}m x {static_params['dz']}m")
+    print(f"Date range: {start_date} to {end_date}")
 
     from chemistry_driver_nc import create_chemistry_driver
     create_chemistry_driver(static_params)
