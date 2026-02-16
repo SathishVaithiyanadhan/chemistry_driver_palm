@@ -2,14 +2,25 @@ import netCDF4 as nc
 import numpy as np
 from osgeo import gdal
 import os
-from concurrent.futures import ThreadPoolExecutor
-import multiprocessing as mp
 from chemistry_driver_config import *
 
 # Initialize global cache with LRU behavior
 _geotiff_cache = {}
 _cache_order = []
 _MAX_CACHE_SIZE = 5  # Keep only 5 files in memory
+
+def filter_negative_and_zero_values(emission_array):
+    """
+    Set all values ≤ 0 to NaN in the emission array.
+    This ensures only positive emission values are kept.
+    """
+    # Create a copy to avoid modifying the original
+    filtered_array = emission_array.copy()
+    
+    # Set values ≤ 0 to NaN
+    filtered_array[filtered_array <= 0] = np.float32(-9999.9)
+    
+    return filtered_array
 
 def extract_static_parameters(static_file):
     """Ultra-fast static parameter extraction with minimal operations"""
@@ -39,7 +50,7 @@ def extract_static_parameters(static_file):
         params['dz'] = float(z_coords[1] - z_coords[0]) if len(z_coords) > 1 else 1.0
         params['z_origin'] = float(z_coords[0])
         
-        # Read building height data - single operation
+        # Read building height data
         if 'buildings_2d' in ncs.variables:
             params['building_height'] = ncs.variables['buildings_2d'][:, :].astype(np.float32)
         else:
@@ -80,7 +91,7 @@ def resample_entire_geotiff(geotiff_path, static_params):
     
     print(f"  Resampling: {os.path.basename(geotiff_path)}")
     
-    # Optimized warp options for maximum speed - SIMPLIFIED version
+    # Optimized warp options
     warp_options = gdal.WarpOptions(
         format='MEM',
         outputBounds=[static_params['west'], static_params['south'], 
@@ -89,7 +100,6 @@ def resample_entire_geotiff(geotiff_path, static_params):
         height=static_params['ny'],
         dstSRS=config_proj,
         resampleAlg=gdal.GRA_NearestNeighbour
-        # Remove unsupported parameters: multithread, warpMemoryLimit, threads
     )
     
     resampled_ds = gdal.Warp('', geotiff_path, options=warp_options)
@@ -144,8 +154,8 @@ def clear_geotiff_cache():
     import gc
     gc.collect()
 
-def process_species_emissions_sequential(spec, spec_idx, static_params, all_time_info, time_steps):
-    """Process emissions for a single species - sequential version"""
+def process_species_emissions(spec, spec_idx, static_params, all_time_info, time_steps):
+    """Process emissions for a single species with zero/negative filtering"""
     print(f"  Processing {spec}...")
     species_emissions = np.full((len(time_steps), static_params['ny'], static_params['nx']), 
                                np.float32(-9999.9))
@@ -186,6 +196,9 @@ def process_species_emissions_sequential(spec, spec_idx, static_params, all_time
             total_emission[fill_mask] = arr_g_per_sec[fill_mask]
             total_emission[add_mask] += arr_g_per_sec[add_mask]
         
+        # Apply filtering: Set all values ≤ 0 to NaN
+        total_emission = filter_negative_and_zero_values(total_emission)
+        
         species_emissions[ts_idx] = total_emission
     
     return spec_idx, species_emissions
@@ -196,11 +209,13 @@ if __name__ == "__main__":
         static_params = extract_static_parameters(static_pth + static + '_static')
     except Exception as e:
         raise RuntimeError(f"Failed to read static driver: {str(e)}")
-
+    
     print("\nStatic Driver Configuration:")
     print(f"Grid: {static_params['nx']}x{static_params['ny']}x{static_params['nz']}")
     print(f"Resolution: {static_params['dx']}m x {static_params['dy']}m x {static_params['dz']}m")
     print(f"Date range: {start_date} to {end_date}")
-
+    print(f"Traffic tag: {'ENABLED' if tag == 'traffic' else 'DISABLED'}")
+    print(f"Zero/negative filtering: ENABLED (all values ≤ 0 will be set to NaN)")
+    
     from chemistry_driver_nc import create_chemistry_driver
     create_chemistry_driver(static_params)

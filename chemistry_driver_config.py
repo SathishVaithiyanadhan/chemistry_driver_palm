@@ -1,4 +1,3 @@
-##Specific date and time
 import numpy as np
 from pyproj import Proj, Transformer
 import warnings
@@ -10,6 +9,7 @@ warnings.filterwarnings("ignore")
 warnings.simplefilter("ignore")
 
 print('Reading PALM chemistry configuration')
+
 # Projection configurations
 config_proj = "EPSG:25832"  # UTM Zone 32N
 default_proj = "EPSG:4326"  # WGS84
@@ -19,21 +19,28 @@ transformer_to_utm = Transformer.from_crs(default_proj, config_proj, always_xy=T
 transformer_to_wgs = Transformer.from_crs(config_proj, default_proj, always_xy=True)
 
 # Path configurations
-emis_geotiff_pth = '/mnt/t/PhD_data/Downscale_Augsburg_center_10m_03022025/'  #Small_area_Emissions_Yearly/'
-static_pth = '/home/vaithisa/GEO4PALM-main/JOBS/Augs_Bourges_Platz/OUTPUT/'  #/home/vaithisa/palm_model_system-v25.04/palm_model_system-v25.04/JOBS/Augsburg_passive/INPUT/Augsburg_passive_static"
-static = 'Augs_Bourges_Platz_120824'
-#static_pth = '/home/vaithisa/palm_model_system-v25.04/palm_model_system-v25.04/JOBS/Augsburg_small_allsector/INPUT/'
-#static = 'Augsburg_small_allsector'
+emis_geotiff_pth = '/home/vaithisa/Downscale_Emissions_simple/downscale/' #'/mnt/t/PhD_data/Downscale_Augsburg_11to15_082024/' #'/home/vaithisa/Downscale_Emissions_simple/downscale/'
+static_pth = '/home/vaithisa/GEO4PALM-main/JOBS/Augs_Bourges_Platz/OUTPUT/'
+static = 'Augs_Bourges_Platz'
 
 # Date and time range configuration
-start_date = "2025-02-03 00:00:00"  # Format: "YYYY-MM-DD HH:MM:SS"
-end_date = "2025-02-03 23:00:00"    # Format: "YYYY-MM-DD HH:MM:SS"
+start_date = "2024-08-11 00:00:00"  # Format: "YYYY-MM-DD HH:MM:SS"
+end_date = "2024-08-11 23:00:00"    # Format: "YYYY-MM-DD HH:MM:SS"
 
 # Convert to datetime objects for easier comparison
 start_dt = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S")
 end_dt = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
 
-# Active emission categories (edit these to select sectors)
+# Traffic tag configuration
+# Set tag = "traffic" to enable traffic-specific species separation
+# Set tag = "" or any other value to disable
+tag = "traffic"  # Enable traffic species separation
+
+# Traffic sectors (these will be separated when tag = "traffic")
+traffic_sectors = ['F_RoadTransport'] # 'I_OffRoad'
+tag_spec_name_str = ('no', 'no2')  # Create traffic versions for these species
+
+# Active emission categories
 active_categories = [
     'A_PublicPower', 
     'B_Industry', 
@@ -47,19 +54,15 @@ active_categories = [
     'J_Waste', 
     'K_AgriLivestock', 
     'L_AgriOther',
-    #'SumAllSectors'
 ]
 cat_name_str = tuple(active_categories)
 cat_name = np.array(cat_name_str, dtype='S64')
 
 # Chemical species configuration
-#spec_name_str = ('pm10','pm2_5')  #passive mechanism
-#spec_name_str = ('pm10','no', 'no2', 'o3')   #phstatp mechanism
-#spec_name_str = ('hno3','rcho','nmvoc', 'ho2','ro2','oh','no2', 'o3','no', 'h2o')  #simple mechanism 
-spec_name_str = ('n2o', 'nox', 'nmvoc', 'so2', 'co', 'pm10', 'pm2_5', 'nh3', 
-                'pb', 'cd', 'hg', 'as', 'ni', 'bc', 'co2', 'ch4', 'no', 'no2', 'ec', 'oc', 'na', 'so4', 
-                'othmin', 'o3', 'h2o', 'oh', 'ho2', 'ro2', 'rcho', 'hno3')
-spec_name = np.array(spec_name_str, dtype='S64')
+#spec_name_str = ('pm10','pm2_5')  # passive mechanism
+# spec_name_str = ('pm10','no', 'no2', 'o3')   # phstatp mechanism
+spec_name_str = ('so2', 'nh3', 'oc', 'hno3','rcho','nmvoc', 'ho2','ro2','oh','no2', 'o3','no', 'h2o')  # simple+salsa_tra mechanism
+#spec_name_str = ('hno3','rcho','nmvoc', 'ho2', 'no2', 'ro2', 'oh', 'o3','no', 'h2o')  # simple_traffic mechanism
 
 # Global cache for entire resampled GeoTIFFs
 _geotiff_cache = {}
