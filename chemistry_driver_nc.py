@@ -1,3 +1,4 @@
+#species order
 import os
 import re
 import numpy as np
@@ -100,7 +101,7 @@ def filter_negative_and_zero_values(emission_array):
     return filtered_array
 
 def create_chemistry_driver(static_params):
-    """Chemistry driver creation with selective traffic species support and zero/negative value filtering"""
+    """Chemistry driver creation with traffic species from spec_name_str"""
     print("\nCreating PALM LOD2 Chemistry Driver")
     print(f"Date range: {start_date} to {end_date}")
     
@@ -108,7 +109,6 @@ def create_chemistry_driver(static_params):
     if tag == "traffic":
         print("Traffic species separation: ENABLED")
         print(f"Traffic sectors: {', '.join(traffic_sectors)}")
-        print(f"Species with traffic versions: {', '.join(tag_spec_name_str)}")
         print("Zero/negative value filtering: ENABLED (all values ≤ 0 will be set to NaN)")
     else:
         print("Traffic species separation: DISABLED")
@@ -124,42 +124,51 @@ def create_chemistry_driver(static_params):
         'ro2': 'RO2', 'oh': 'OH', 'h2o': 'H2O'
     }
     
-    # Prepare species names based on traffic tag
-    all_species_to_process = []
+    # Use spec_name_str directly - this preserves the exact order
+    all_species_to_process = list(spec_name_str)
+    
+    # Create uppercase versions for output, preserving order
     uppercase_spec_names = []
-    
-    # First, add all regular species (from spec_name_str)
     for spec in spec_name_str:
-        base_name = species_mapping.get(spec, spec.upper().replace('_', ''))
-        all_species_to_process.append(spec)
-        uppercase_spec_names.append(base_name)
-    
-    # Then, if traffic tag is enabled, add traffic species ONLY for those in tag_spec_name_str
-    if tag == "traffic":
-        for spec in tag_spec_name_str:
-            if spec in spec_name_str:  # Only create traffic versions for species that exist in regular list
-                base_name = species_mapping.get(spec, spec.upper().replace('_', ''))
-                traffic_spec_name = f"{spec}_traffic"
-                all_species_to_process.append(traffic_spec_name)
-                uppercase_spec_names.append(f"{base_name}_traffic")
-            else:
-                print(f"  Warning: {spec} is in tag_spec_name_str but not in spec_name_str. Skipping traffic version.")
+        # Check if this is a traffic species (ends with _traffic, case insensitive)
+        is_traffic = spec.lower().endswith('_traffic')
+        
+        # Get base species name (remove _traffic if present)
+        if is_traffic:
+            base_spec = spec[:-8]  # Remove '_traffic'
+        else:
+            base_spec = spec
+            
+        # Map to uppercase if in mapping, otherwise uppercase
+        if base_spec.lower() in species_mapping:
+            base_upper = species_mapping[base_spec.lower()]
+        else:
+            base_upper = base_spec.upper().replace('_', '')
+        
+        # Add _traffic suffix if it was a traffic species
+        if is_traffic:
+            uppercase_spec_names.append(f"{base_upper}_traffic")
+        else:
+            uppercase_spec_names.append(base_upper)
     
     print(f"Total species to process: {len(all_species_to_process)}")
-    print(f"Regular species: {len(spec_name_str)}")
-    if tag == "traffic":
-        print(f"Traffic species: {len(tag_spec_name_str)}")
+    print(f"Species order (preserved from config):")
+    for i, spec in enumerate(all_species_to_process):
+        print(f"  {i+1}: {spec} -> {uppercase_spec_names[i]}")
     
-    # Collect temporal emission data for ALL species (regular and traffic)
+    # Collect temporal emission data for ALL species
     print("Scanning emission files...")
     all_time_info = {}
     
     for spec in all_species_to_process:
         # Determine if this is a traffic species
-        is_traffic_species = spec.endswith('_traffic')
+        is_traffic_species = spec.lower().endswith('_traffic')
         
         # Get base species name (remove _traffic suffix if present)
-        base_spec = spec.replace('_traffic', '') if is_traffic_species else spec
+        if is_traffic_species:
+            base_spec = spec[:-8]  # Remove '_traffic'
+        else:
+            base_spec = spec
         
         gt_path = f"{emis_geotiff_pth}emission_{base_spec}_temporal.tif"
         if os.path.exists(gt_path):
@@ -216,7 +225,6 @@ def create_chemistry_driver(static_params):
         # Add traffic-specific attributes only if traffic is enabled
         if tag == "traffic":
             attrs['traffic_sectors'] = ', '.join(traffic_sectors)
-            attrs['species_with_traffic_versions'] = ', '.join(tag_spec_name_str)
         
         ds.setncatts(attrs)
         
@@ -322,8 +330,14 @@ def create_chemistry_driver(static_params):
         print("Note: All values ≤ 0 will be filtered and set to NaN")
         
         for spec_idx, spec_name in enumerate(all_species_to_process):
-            is_traffic_species = spec_name.endswith('_traffic')
-            base_spec = spec_name.replace('_traffic', '') if is_traffic_species else spec_name
+            # Determine if this is a traffic species
+            is_traffic_species = spec_name.lower().endswith('_traffic')
+            
+            # Get base species name (remove _traffic suffix if present)
+            if is_traffic_species:
+                base_spec = spec_name[:-8]  # Remove '_traffic'
+            else:
+                base_spec = spec_name
             
             print(f"  Processing {spec_idx+1}/{len(all_species_to_process)}: {spec_name} "
                   f"({'traffic sectors only' if is_traffic_species else 'all sectors'})")
@@ -374,9 +388,8 @@ def create_chemistry_driver(static_params):
                     total_emission[add_mask] += arr_g_per_sec[add_mask]
                 
                 # FILTER: Set all values ≤ 0 to NaN (fill value)
-                total_emission = filter_negative_and_zero_values(total_emission)
-                
-                species_emissions[ts_idx] = total_emission
+                filtered_emission = filter_negative_and_zero_values(total_emission)
+                species_emissions[ts_idx] = filtered_emission
             
             # Store in NetCDF variable
             emission_values[:, 0, :, :, spec_idx] = species_emissions
@@ -386,10 +399,10 @@ def create_chemistry_driver(static_params):
     
     print(f"\nSUCCESS: Created {output_file}")
     print(f"- Total species: {len(all_species_to_process)}")
-    print(f"- Regular species: {len(spec_name_str)}")
-    if tag == "traffic":
-        print(f"- Traffic species: {len(tag_spec_name_str)}")
-        print(f"- Species with traffic versions: {', '.join(tag_spec_name_str)}")
+    print(f"- Species list (in order):")
+    for i, (orig, upper) in enumerate(zip(all_species_to_process, uppercase_spec_names)):
+        traffic_indicator = " (traffic)" if orig.lower().endswith('_traffic') else ""
+        print(f"    {i+1}: {orig} -> {upper}{traffic_indicator}")
     print(f"- Time steps: {len(time_steps)}")
     print(f"- Date range: {start_date} to {end_date}")
     print(f"- Grid: {static_params['nx']}x{static_params['ny']}x{static_params['nz']}")

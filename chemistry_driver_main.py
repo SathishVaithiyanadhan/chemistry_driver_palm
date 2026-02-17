@@ -1,3 +1,4 @@
+#species order
 import netCDF4 as nc
 import numpy as np
 from osgeo import gdal
@@ -154,54 +155,20 @@ def clear_geotiff_cache():
     import gc
     gc.collect()
 
-def process_species_emissions(spec, spec_idx, static_params, all_time_info, time_steps):
-    """Process emissions for a single species with zero/negative filtering"""
-    print(f"  Processing {spec}...")
-    species_emissions = np.full((len(time_steps), static_params['ny'], static_params['nx']), 
-                               np.float32(-9999.9))
-    
-    if spec not in all_time_info:
-        return spec_idx, species_emissions
-    
-    time_info = all_time_info[spec]
-    
-    for ts_idx, ts in enumerate(time_steps):
-        date_key = ts['date']
-        hour_key = ts['hour']
-        
-        if date_key not in time_info or hour_key not in time_info[date_key]:
-            continue
-        
-        # Initialize with fill values
-        total_emission = np.full((static_params['ny'], static_params['nx']), 
-                               np.float32(-9999.9))
-        
-        # Aggregate emissions
-        bands = time_info[date_key][hour_key]
-        for band in bands:
-            arr = read_geotiff_band(
-                f"{emis_geotiff_pth}emission_{spec}_temporal.tif",
-                band['band_num'],
-                static_params
-            )
-            
-            # Vectorized aggregation with unit conversion
-            valid_mask = ~np.isnan(arr)
-            fill_mask = (total_emission == np.float32(-9999.9)) & valid_mask
-            add_mask = valid_mask & ~fill_mask
-            
-            # Convert from kg/m2/hour to g/m2/s
-            arr_g_per_sec = arr * (1000.0 / 3600.0)
-            
-            total_emission[fill_mask] = arr_g_per_sec[fill_mask]
-            total_emission[add_mask] += arr_g_per_sec[add_mask]
-        
-        # Apply filtering: Set all values ≤ 0 to NaN
-        total_emission = filter_negative_and_zero_values(total_emission)
-        
-        species_emissions[ts_idx] = total_emission
-    
-    return spec_idx, species_emissions
+def get_base_species_name(species_name):
+    """
+    Extract the base species name by removing '_traffic' suffix if present.
+    Handles case sensitivity properly.
+    """
+    if species_name.lower().endswith('_traffic'):
+        # Remove the _traffic suffix (case-insensitive)
+        return species_name[:-8]  # Remove last 8 characters ('_traffic')
+    else:
+        return species_name
+
+def is_traffic_species(species_name):
+    """Check if a species name is a traffic species"""
+    return species_name.lower().endswith('_traffic')
 
 if __name__ == "__main__":
     print('\nExtracting static driver parameters')
