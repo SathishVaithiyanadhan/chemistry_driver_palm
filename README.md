@@ -21,6 +21,8 @@ The driver integrates gridded emission data (e.g., from the GRETA inventory) wit
 - **Emission Stack height** includes the height of the buildings (LOD2).
 - Automatic **time-step** synchronization across species based on the emission input. 
 - Properly handling the NAN values.
+- Feature to add the tagged species (e.g. traffic tagged species) in the output 
+- Pick the emissions on your desired date and time to the PALM chemistry input file from GRETA input tiff files. 
 
 ---
 
