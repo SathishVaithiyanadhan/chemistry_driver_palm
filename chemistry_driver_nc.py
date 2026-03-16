@@ -1,4 +1,3 @@
-#species order
 import os
 import re
 import numpy as np
@@ -95,8 +94,8 @@ def filter_negative_and_zero_values(emission_array):
     # Create a copy to avoid modifying the original
     filtered_array = emission_array.copy()
     
-    # Set values ≤ 0 to NaN
-    filtered_array[filtered_array <= 0] = np.float32(-9999.9)
+    # Set values < 0 to NaN
+    filtered_array[filtered_array < 0] = np.float32(0)
     
     return filtered_array
 
@@ -109,19 +108,19 @@ def create_chemistry_driver(static_params):
     if tag == "traffic":
         print("Traffic species separation: ENABLED")
         print(f"Traffic sectors: {', '.join(traffic_sectors)}")
-        print("Zero/negative value filtering: ENABLED (all values ≤ 0 will be set to NaN)")
+        print("Zero/negative value filtering: ENABLED (all values < 0 will be set to 0)")
     else:
         print("Traffic species separation: DISABLED")
-        print("Zero/negative value filtering: ENABLED (all values ≤ 0 will be set to NaN)")
+        print("Zero/negative value filtering: ENABLED (all values < 0 will be set to 0)")
     
     # Species mapping
     species_mapping = {
         'n2o': 'N2O', 'nox': 'NOX', 'nmvoc': 'RH', 'so2': 'H2SO4', 'co': 'CO',
         'pm10': 'PM10', 'pm2_5': 'PM25', 'nh3': 'NH3', 'pb': 'PB', 'cd': 'CD',
         'hg': 'HG', 'as': 'AS', 'ni': 'NI', 'bc': 'BC', 'co2': 'CO2', 'ch4': 'CH4',
-        'no': 'NO', 'no2': 'NO2', 'ec': 'EC', 'na': 'NA', 'so4': 'SO4', 'oc': 'OCNV',
+        'no': 'NO', 'no2': 'NO2', 'ec': 'EC', 'na': 'NA', 'so4': 'SO4', 'ocnv': 'OCNV',
         'othmin': 'OTHMIN', 'o3': 'O3', 'hno3': 'HNO3', 'rcho': 'RCHO', 'ho2': 'HO2',
-        'ro2': 'RO2', 'oh': 'OH', 'h2o': 'H2O'
+        'ro2': 'RO2', 'oh': 'OH', 'h2o': 'H2O', 'ocsv': 'OCSV'
     }
     
     # Use spec_name_str directly - this preserves the exact order
@@ -218,7 +217,7 @@ def create_chemistry_driver(static_params):
             'simulation_start': start_date,
             'simulation_end': end_date,
             'traffic_species_enabled': 'yes' if tag == "traffic" else 'no',
-            'zero_negative_filter': 'yes (all values ≤ 0 set to NaN)',
+            'zero_negative_filter': 'yes (all values < 0 set to 0)',
             'Conventions': 'CF-1.7'
         }
         
@@ -327,7 +326,7 @@ def create_chemistry_driver(static_params):
         
         # Process emissions for all species
         print("Processing emissions data...")
-        print("Note: All values ≤ 0 will be filtered and set to NaN")
+        print("Note: All values < 0 will be filtered and set to 0")
         
         for spec_idx, spec_name in enumerate(all_species_to_process):
             # Determine if this is a traffic species
