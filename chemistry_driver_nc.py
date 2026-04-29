@@ -1,3 +1,4 @@
+#species ordered
 import os
 import re
 import numpy as np
@@ -21,15 +22,11 @@ def get_time_bands_info_fast(geotiff_path, filter_traffic=False):
     if not ds: 
         raise ValueError(f"Can't open {geotiff_path}")
     
-    # Use regular dict
     time_info = {}
     
-    # Determine which categories to include
     if filter_traffic:
-        # When filter_traffic=True, we only want traffic sectors
         active_set = set(traffic_sectors)
     else:
-        # When filter_traffic=False, we want all sectors
         active_set = set(active_categories)
     
     for band_num in range(1, ds.RasterCount + 1):
@@ -38,20 +35,16 @@ def get_time_bands_info_fast(geotiff_path, filter_traffic=False):
         if desc:
             parsed = parse_band_description(desc)
             if parsed and parsed[0] in active_set:
-                band_date_str = parsed[2]  # YYYYMMDD
-                band_hour_str = parsed[1]  # hour as string '00' to '23'
-                band_hour = int(band_hour_str)  # hour as integer 0-23
+                band_date_str = parsed[2]
+                band_hour_str = parsed[1]
+                band_hour = int(band_hour_str)
                 
-                # Convert band date to datetime for comparison
                 band_dt = datetime.datetime.strptime(band_date_str, "%Y%m%d") + \
                          datetime.timedelta(hours=band_hour)
                 
-                # Check if band falls within the specified date range
                 if start_dt <= band_dt <= end_dt:
-                    # Initialize date dict if not exists
                     if band_date_str not in time_info:
                         time_info[band_date_str] = {}
-                    # Initialize hour list if not exists
                     if f"h{band_hour_str}" not in time_info[band_date_str]:
                         time_info[band_date_str][f"h{band_hour_str}"] = []
                     
@@ -87,24 +80,20 @@ def create_all_time_steps():
     return time_steps
 
 def filter_negative_and_zero_values(emission_array):
-    """
-    Set all values ≤ 0 to NaN in the emission array.
-    This ensures only positive emission values are kept.
-    """
-    # Create a copy to avoid modifying the original
+    """Set all values < 0 to 0 in the emission array."""
     filtered_array = emission_array.copy()
-    
-    # Set values < 0 to NaN
     filtered_array[filtered_array < 0] = np.float32(0)
-    
     return filtered_array
 
 def create_chemistry_driver(static_params):
     """Chemistry driver creation with traffic species from spec_name_str"""
     print("\nCreating PALM LOD2 Chemistry Driver")
     print(f"Date range: {start_date} to {end_date}")
+
+    # FORCE z dimension to 1 for surface-only emissions
+    static_params['nz'] = 1
+    print("Note: z dimension forced to 1 (surface emissions only)")
     
-    # Check if traffic tag is enabled
     if tag == "traffic":
         print("Traffic species separation: ENABLED")
         print(f"Traffic sectors: {', '.join(traffic_sectors)}")
@@ -113,7 +102,6 @@ def create_chemistry_driver(static_params):
         print("Traffic species separation: DISABLED")
         print("Zero/negative value filtering: ENABLED (all values < 0 will be set to 0)")
     
-    # Species mapping
     species_mapping = {
         'n2o': 'N2O', 'nox': 'NOX', 'nmvoc': 'RH', 'so2': 'H2SO4', 'co': 'CO',
         'pm10': 'PM10', 'pm2_5': 'PM25', 'nh3': 'NH3', 'pb': 'PB', 'cd': 'CD',
@@ -123,30 +111,26 @@ def create_chemistry_driver(static_params):
         'ro2': 'RO2', 'oh': 'OH', 'h2o': 'H2O', 'ocsv': 'OCSV'
     }
     
-    # Use spec_name_str directly - this preserves the exact order
     all_species_to_process = list(spec_name_str)
     
-    # Create uppercase versions for output, preserving order
+    # Create uppercase versions for output
     uppercase_spec_names = []
     for spec in spec_name_str:
-        # Check if this is a traffic species (ends with _traffic, case insensitive)
-        is_traffic = spec.lower().endswith('_traffic')
+        is_traffic = spec.lower().endswith('_tra')
         
-        # Get base species name (remove _traffic if present)
+        # FIX: Use replace instead of slicing to correctly remove _tra suffix
         if is_traffic:
-            base_spec = spec[:-8]  # Remove '_traffic'
+            base_spec = spec.lower().replace('_tra', '')  # "pm10_tra" -> "pm10"
         else:
-            base_spec = spec
-            
-        # Map to uppercase if in mapping, otherwise uppercase
-        if base_spec.lower() in species_mapping:
-            base_upper = species_mapping[base_spec.lower()]
+            base_spec = spec.lower()
+        
+        if base_spec in species_mapping:
+            base_upper = species_mapping[base_spec]
         else:
             base_upper = base_spec.upper().replace('_', '')
         
-        # Add _traffic suffix if it was a traffic species
         if is_traffic:
-            uppercase_spec_names.append(f"{base_upper}_traffic")
+            uppercase_spec_names.append(f"{base_upper}_tra")
         else:
             uppercase_spec_names.append(base_upper)
     
@@ -160,25 +144,23 @@ def create_chemistry_driver(static_params):
     all_time_info = {}
     
     for spec in all_species_to_process:
-        # Determine if this is a traffic species
-        is_traffic_species = spec.lower().endswith('_traffic')
+        # FIX: Check for _tra suffix (not _traffic)
+        is_traffic_species = spec.lower().endswith('_tra')
         
-        # Get base species name (remove _traffic suffix if present)
+        # FIX: Use replace to correctly get base species name
         if is_traffic_species:
-            base_spec = spec[:-8]  # Remove '_traffic'
+            base_spec = spec.lower().replace('_tra', '')  # "pm10_tra" -> "pm10", "pm2_5_tra" -> "pm2_5", "no2_tra" -> "no2"
         else:
             base_spec = spec
         
         gt_path = f"{emis_geotiff_pth}emission_{base_spec}_temporal.tif"
         if os.path.exists(gt_path):
-            print(f"  Found: {spec} ({'traffic sectors only' if is_traffic_species else 'all sectors'})")
-            # For traffic species, filter to only traffic sectors
+            print(f"  Found: {spec} ({'traffic sectors only' if is_traffic_species else 'all sectors'}) -> file: emission_{base_spec}_temporal.tif")
             all_time_info[spec] = get_time_bands_info_fast(gt_path, filter_traffic=is_traffic_species)
         else:
             print(f"  Missing: {spec} (file: {os.path.basename(gt_path)})")
-            all_time_info[spec] = {}  # Empty dict for missing files
+            all_time_info[spec] = {}
     
-    # Create ALL expected time steps
     time_steps = create_all_time_steps()
     
     if not time_steps:
@@ -199,7 +181,6 @@ def create_chemistry_driver(static_params):
     
     # Create NetCDF file
     with nc.Dataset(output_file, 'w') as ds:
-        # Global attributes
         attrs = {
             'description': 'Chemistry driver for PALM model simulation with LOD2 emissions from the Downscaled GRETA Emissions',
             'author': 'Sathish Kumar Vaithiyanadhan (sathish.vaithiyanadhan@med.uni-augsburg.de)',
@@ -221,13 +202,11 @@ def create_chemistry_driver(static_params):
             'Conventions': 'CF-1.7'
         }
         
-        # Add traffic-specific attributes only if traffic is enabled
         if tag == "traffic":
             attrs['traffic_sectors'] = ', '.join(traffic_sectors)
         
         ds.setncatts(attrs)
         
-        # Dimensions
         n_time = len(time_steps)
         n_species = len(all_species_to_process)
         
@@ -238,12 +217,8 @@ def create_chemistry_driver(static_params):
         ds.createDimension('nspecies', n_species)
         ds.createDimension('time', None)
         
-        # Coordinate variables
         z = ds.createVariable('z', 'f4', ('z',))
-        z_data = np.linspace(static_params['z_origin'], 
-                           static_params['z_origin'] + (static_params['nz']-1)*static_params['dz'],
-                           static_params['nz'])
-        z[:] = z_data
+        z[:] = np.float32(static_params['z_origin'])  # Single value at surface height
         z.units = "m"
         z.axis = "Z"
         z.long_name = "height above origin"
@@ -264,12 +239,10 @@ def create_chemistry_driver(static_params):
         y.long_name = "y-distance from origin"
         y.units = "m"
         
-        # nspecies variable
         nspecies_var = ds.createVariable('nspecies', 'i4', ('nspecies',))
         nspecies_var[:] = np.arange(1, n_species + 1, dtype=np.int32)
         nspecies_var.long_name = "nspecies"
         
-        # Time variables
         time = ds.createVariable('time', 'i4', ('time',))
         time_data = np.arange(1, n_time + 1, dtype=np.int32)
         time[:] = time_data
@@ -282,7 +255,6 @@ def create_chemistry_driver(static_params):
         timestamp[:] = timestamp_data
         timestamp.long_name = "time stamp"
         
-        # Emission metadata variables
         emission_name = ds.createVariable('emission_name', 'S1', 
                                          ('nspecies', 'field_length'))
         emission_name_data = nc.stringtochar(np.array(uppercase_spec_names, dtype='S64'))
@@ -297,7 +269,6 @@ def create_chemistry_driver(static_params):
         emission_index.long_name = "emission species index"
         emission_index.standard_name = "emission_index"
         
-        # Main emission data
         emission_values = ds.createVariable('emission_values', 'f4', 
                                           ('time', 'z', 'y', 'x', 'nspecies'),
                                           fill_value=np.float32(-9999.9))
@@ -309,7 +280,6 @@ def create_chemistry_driver(static_params):
         emission_values.missing_value = np.float32(-9999.9)
         emission_values.lod = np.int32(2)
         
-        # Stack height
         stack_height = ds.createVariable('emission_stack_height', 'f4', ('y', 'x'),
                                         fill_value=np.float32(-9999.9))
         building_mask = static_params['building_height'] > 0
@@ -324,83 +294,73 @@ def create_chemistry_driver(static_params):
         stack_height.grid_mapping = "crsUTM: E_UTM N_UTM crsETRS: lon lat"
         stack_height.missing_value = np.float32(-9999.9)
         
-        # Process emissions for all species
         print("Processing emissions data...")
         print("Note: All values < 0 will be filtered and set to 0")
         
         for spec_idx, spec_name in enumerate(all_species_to_process):
-            # Determine if this is a traffic species
-            is_traffic_species = spec_name.lower().endswith('_traffic')
+            # FIX: Check for _tra suffix
+            is_traffic_species = spec_name.lower().endswith('_tra')
             
-            # Get base species name (remove _traffic suffix if present)
+            # FIX: Use replace to correctly get base species name
             if is_traffic_species:
-                base_spec = spec_name[:-8]  # Remove '_traffic'
+                base_spec = spec_name.lower().replace('_tra', '')  # "pm10_tra" -> "pm10", "pm2_5_tra" -> "pm2_5"
             else:
                 base_spec = spec_name
             
             print(f"  Processing {spec_idx+1}/{len(all_species_to_process)}: {spec_name} "
-                  f"({'traffic sectors only' if is_traffic_species else 'all sectors'})")
+                  f"({'traffic sectors only' if is_traffic_species else 'all sectors'}) "
+                  f"-> reading from emission_{base_spec}_temporal.tif")
             
-            # Initialize emissions array for this species
             species_emissions = np.full((n_time, static_params['ny'], static_params['nx']), 
                                        np.float32(-9999.9))
             
             if spec_name not in all_time_info or not all_time_info[spec_name]:
-                # No data for this species
+                print(f"    WARNING: No time info for {spec_name}, filling with -9999.9")
                 emission_values[:, 0, :, :, spec_idx] = species_emissions
                 continue
             
             time_info = all_time_info[spec_name]
             
-            # Process each time step
             for ts_idx, ts in enumerate(time_steps):
                 date_key = ts['date']
                 hour_key = ts['hour']
                 
                 if date_key not in time_info or hour_key not in time_info[date_key]:
-                    # No data for this time step
                     continue
                 
-                # Initialize with fill values
                 total_emission = np.full((static_params['ny'], static_params['nx']), 
                                        np.float32(-9999.9))
                 
-                # Aggregate emissions for this time step
                 bands = time_info[date_key][hour_key]
                 for band in bands:
-                    # Read band data
+                    # FIX: Read from BASE species file
                     arr = read_geotiff_band(
                         f"{emis_geotiff_pth}emission_{base_spec}_temporal.tif",
                         band['band_num'],
                         static_params
                     )
                     
-                    # Vectorized aggregation with unit conversion
                     valid_mask = ~np.isnan(arr)
                     fill_mask = (total_emission == np.float32(-9999.9)) & valid_mask
                     add_mask = valid_mask & ~fill_mask
                     
-                    # Convert from kg/m2/hour to g/m2/s
                     arr_g_per_sec = arr * (1000.0 / 3600.0)
                     
                     total_emission[fill_mask] = arr_g_per_sec[fill_mask]
                     total_emission[add_mask] += arr_g_per_sec[add_mask]
                 
-                # FILTER: Set all values ≤ 0 to NaN (fill value)
                 filtered_emission = filter_negative_and_zero_values(total_emission)
                 species_emissions[ts_idx] = filtered_emission
             
-            # Store in NetCDF variable
             emission_values[:, 0, :, :, spec_idx] = species_emissions
     
-    # Clear cache
     clear_geotiff_cache()
     
     print(f"\nSUCCESS: Created {output_file}")
     print(f"- Total species: {len(all_species_to_process)}")
     print(f"- Species list (in order):")
     for i, (orig, upper) in enumerate(zip(all_species_to_process, uppercase_spec_names)):
-        traffic_indicator = " (traffic)" if orig.lower().endswith('_traffic') else ""
+        traffic_indicator = " (traffic)" if orig.lower().endswith('_tra') else ""
         print(f"    {i+1}: {orig} -> {upper}{traffic_indicator}")
     print(f"- Time steps: {len(time_steps)}")
     print(f"- Date range: {start_date} to {end_date}")
@@ -409,6 +369,3 @@ def create_chemistry_driver(static_params):
     print(f"- Traffic species separation: {'ENABLED' if tag == 'traffic' else 'DISABLED'}")
     
     return output_file
-
-# Replace the original function
-create_chemistry_driver = create_chemistry_driver
