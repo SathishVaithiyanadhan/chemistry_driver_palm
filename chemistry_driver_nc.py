@@ -170,7 +170,9 @@ def create_chemistry_driver(static_params):
     print(f"Time range: {time_steps[0]['datetime'].strftime('%Y-%m-%d %H:%M')} to {time_steps[-1]['datetime'].strftime('%Y-%m-%d %H:%M')}")
     
     current_time = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S +000")
-    output_file = f"{static_pth}{static}_chemistry"
+    #output_file = f"{static_pth}{static}_chemistry"
+    output_filename = static.replace('_static', '_chemistry')
+    output_file = f"{static_pth}{output_filename}"
     
     # Pre-compute timestamps
     print("Pre-computing timestamps...")
@@ -244,13 +246,13 @@ def create_chemistry_driver(static_params):
         nspecies_var.long_name = "nspecies"
         
         time = ds.createVariable('time', 'i4', ('time',))
-        #time_data = np.arange(1, n_time + 1, dtype=np.int32)
-        time_data = np.arange(0, n_time, dtype=np.int32)  # Changed from 1 to 0, and n_time+1 to n_time
+        # Time in seconds (each time step = 1 hour = 3600 seconds)
+        time_data = np.arange(0, n_time, dtype=np.int32) * 3600  #remove * 3600 to have time in hours instead of seconds
         time[:] = time_data
 
         time.long_name = "time"
         time.standard_name = "time"
-        time.units = "hours since first timestamp"
+        time.units = "seconds since first timestamp"
         
         timestamp = ds.createVariable('timestamp', 'S1', ('time', 'field_length'))
         timestamp_data = nc.stringtochar(np.array(timestamps_array, dtype='S64'))

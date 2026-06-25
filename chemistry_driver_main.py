@@ -172,8 +172,14 @@ def is_traffic_species(species_name):
 
 if __name__ == "__main__":
     print('\nExtracting static driver parameters')
+    
+    # Use the exact static filename without modification
+    static_file_path = static_pth + static
+    
+    print(f"Reading static file: {static_file_path}")
+    
     try:
-        static_params = extract_static_parameters(static_pth + static + '_static')
+        static_params = extract_static_parameters(static_file_path)
     except Exception as e:
         raise RuntimeError(f"Failed to read static driver: {str(e)}")
     
