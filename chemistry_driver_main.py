@@ -10,16 +10,18 @@ _geotiff_cache = {}
 _cache_order = []
 _MAX_CACHE_SIZE = 5  # Keep only 5 files in memory
 
-def filter_negative_and_zero_values(emission_array):
+def filter_negative_and_zero_values(emission_array, fill_mask=None, fill_value=np.float32(-9999.9)):
     """
-    Set all values ≤ 0 to NaN in the emission array.
-    This ensures only positive emission values are kept.
+    Set negative values to 0 for data pixels; preserve fill_value for no-data pixels.
     """
-    # Create a copy to avoid modifying the original
     filtered_array = emission_array.copy()
     
-    # Set values ≤ 0 to NaN
-    filtered_array[filtered_array <= 0] = np.float32(-9999.9)
+    if fill_mask is not None:
+        data_mask = ~fill_mask
+        filtered_array[data_mask & (filtered_array < 0)] = np.float32(0)
+        filtered_array[fill_mask] = fill_value
+    else:
+        filtered_array[filtered_array < 0] = np.float32(0)
     
     return filtered_array
 

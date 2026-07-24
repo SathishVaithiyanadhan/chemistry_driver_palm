@@ -20,10 +20,10 @@ transformer_to_utm = Transformer.from_crs(default_proj, config_proj, always_xy=T
 transformer_to_wgs = Transformer.from_crs(config_proj, default_proj, always_xy=True)
 
 # Path configurations
-emis_geotiff_pth = '/mnt/t/PhD_data/downscale/Downscale_10m_3days/' #'/mnt/t/PhD_data/downscale/UA_CLC_100m_3days/'  #'/home/vaithisa/Downscale_Emissions_simple/downscale/' #'/mnt/d/downscaled_emissions/UA_CLC_100m_3days/'
+emis_geotiff_pth = '/hpc/gpfs2/home/u/vaithisa/UniA/Downscale_Emissions_simple/Downscale_10m_3days/' #'/mnt/t/PhD_data/downscale/UA_CLC_100m_3days/'  #'/home/vaithisa/Downscale_Emissions_simple/downscale/' #'/mnt/d/downscaled_emissions/UA_CLC_100m_3days/'
 #static_pth = '/home/vaithisa/GEO4PALM-main/JOBS/Augs_Bourges_Platz/OUTPUT/'   
-static_pth = '/home/vaithisa/palm_model_system-v25.10/JOBS/salsa_tra/INPUT/'  #'/mnt/d/downscaled_emissions/UA_CLC_100m_3days/'
-static = 'salsa_tra_static'
+static_pth = '/hpc/gpfs2/scratch/u/vaithisa/palm_25.10/palm_mbees/palm/JOBS/Salsa_tra128/INPUT/'  #'/mnt/d/downscaled_emissions/UA_CLC_100m_3days/'
+static = 'Salsa_tra128_static'
 
 # Date and time range configuration
 start_date = "2024-08-25 00:00:00"  # Format: "YYYY-MM-DD HH:MM:SS"
@@ -53,7 +53,7 @@ active_categories = [
     'C_OtherStationaryComb', 
     'D_Fugitives',
     'E_Solvents', 
-    'F_RoadTransport', 
+    #'F_RoadTransport', 
     'G_Shipping', 
     'H_Aviation',
     'I_OffRoad', 

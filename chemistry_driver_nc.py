@@ -79,10 +79,27 @@ def create_all_time_steps():
     
     return time_steps
 
-def filter_negative_and_zero_values(emission_array):
-    """Set all values < 0 to 0 in the emission array."""
+def filter_negative_and_zero_values(emission_array, fill_mask=None, fill_value=np.float32(-9999.9)):
+    """
+    Set values < 0 to 0, but preserve fill_value for no-data pixels.
+    
+    Args:
+        emission_array: The array to filter
+        fill_mask: Boolean mask of pixels that are no-data (True = no data)
+        fill_value: The no-data fill value to preserve
+    """
     filtered_array = emission_array.copy()
-    filtered_array[filtered_array < 0] = np.float32(0)
+    
+    if fill_mask is not None:
+        # Set negative values to 0, but only for pixels that had data
+        data_mask = ~fill_mask
+        filtered_array[data_mask & (filtered_array < 0)] = np.float32(0)
+        # Restore fill_value for no-data pixels
+        filtered_array[fill_mask] = fill_value
+    else:
+        # Original behavior when no fill_mask provided
+        filtered_array[filtered_array < 0] = np.float32(0)
+    
     return filtered_array
 
 def create_chemistry_driver(static_params):
@@ -200,7 +217,7 @@ def create_chemistry_driver(static_params):
             'simulation_start': start_date,
             'simulation_end': end_date,
             'traffic_species_enabled': 'yes' if tag == "traffic" else 'no',
-            'zero_negative_filter': 'yes (all values < 0 set to 0)',
+            'zero_negative_filter': 'yes (data pixels < 0 → 0, no-data pixels preserve fill_value -9999.9)',
             'Conventions': 'CF-1.7'
         }
         
@@ -299,7 +316,7 @@ def create_chemistry_driver(static_params):
         stack_height.missing_value = np.float32(-9999.9)
         
         print("Processing emissions data...")
-        print("Note: All values < 0 will be filtered and set to 0")
+        print("Note: Data pixels < 0 → 0; no-data pixels preserve fill_value (-9999.9)")
         
         for spec_idx, spec_name in enumerate(all_species_to_process):
             # FIX: Check for _tra suffix
@@ -353,7 +370,9 @@ def create_chemistry_driver(static_params):
                     total_emission[fill_mask] = arr_g_per_sec[fill_mask]
                     total_emission[add_mask] += arr_g_per_sec[add_mask]
                 
-                filtered_emission = filter_negative_and_zero_values(total_emission)
+                # Identify pixels that never received any sector data
+                nodata_mask = (total_emission == np.float32(-9999.9))
+                filtered_emission = filter_negative_and_zero_values(total_emission, fill_mask=nodata_mask)
                 species_emissions[ts_idx] = filtered_emission
             
             emission_values[:, 0, :, :, spec_idx] = species_emissions
