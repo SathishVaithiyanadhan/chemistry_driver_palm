@@ -50,7 +50,7 @@ The following data is required to create the chemistry driver for the PALM simul
 
 2. Run Main Script
 
-    * **python chemistry_driver_main.py** 
+    * **python chemistry_driver_main.py name.yaml** 
 
 3. Output
 
