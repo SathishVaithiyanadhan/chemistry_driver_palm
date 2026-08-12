@@ -79,7 +79,7 @@ def create_all_time_steps():
     
     return time_steps
 
-def filter_negative_and_zero_values(emission_array, fill_mask=None, fill_value=np.float32(-9999.9)):
+def filter_negative_and_zero_values(emission_array, fill_mask=None, fill_value=np.float32(-9999.0)):
     """
     Set values < 0 to 0, but preserve fill_value for no-data pixels.
     
@@ -217,7 +217,7 @@ def create_chemistry_driver(static_params):
             'simulation_start': start_date,
             'simulation_end': end_date,
             'traffic_species_enabled': 'yes' if tag == "traffic" else 'no',
-            'zero_negative_filter': 'yes (data pixels < 0 → 0, no-data pixels preserve fill_value -9999.9)',
+            'zero_negative_filter': 'yes (data pixels < 0 → 0, no-data pixels preserve fill_value -9999.0)',
             'Conventions': 'CF-1.7'
         }
         
@@ -231,6 +231,7 @@ def create_chemistry_driver(static_params):
         
         ds.createDimension('z', static_params['nz'])
         ds.createDimension('field_length', 64)
+        ds.createDimension('max_string_length', 25)
         ds.createDimension('x', static_params['nx'])
         ds.createDimension('y', static_params['ny'])
         ds.createDimension('nspecies', n_species)
@@ -262,14 +263,18 @@ def create_chemistry_driver(static_params):
         nspecies_var[:] = np.arange(1, n_species + 1, dtype=np.int32)
         nspecies_var.long_name = "nspecies"
         
-        time = ds.createVariable('time', 'i4', ('time',))
+        max_string_length = ds.createVariable('max_string_length', 'i4', ('max_string_length',))
+        max_string_length[:] = np.arange(1, 26, dtype=np.int32)
+        max_string_length.long_name = "max string length"
+        
+        time = ds.createVariable('time', 'f4', ('time',))
         # Time in seconds (each time step = 1 hour = 3600 seconds)
-        time_data = np.arange(0, n_time, dtype=np.int32) * 3600  #remove * 3600 to have time in hours instead of seconds
+        time_data = np.arange(0, n_time, dtype=np.float32) * 3600.0  #remove * 3600 to have time in hours instead of seconds
         time[:] = time_data
 
         time.long_name = "time"
         time.standard_name = "time"
-        time.units = "seconds since first timestamp"
+        time.units = "s"
         
         timestamp = ds.createVariable('timestamp', 'S1', ('time', 'field_length'))
         timestamp_data = nc.stringtochar(np.array(timestamps_array, dtype='S64'))
@@ -277,46 +282,31 @@ def create_chemistry_driver(static_params):
         timestamp.long_name = "time stamp"
         
         emission_name = ds.createVariable('emission_name', 'S1', 
-                                         ('nspecies', 'field_length'))
-        emission_name_data = nc.stringtochar(np.array(uppercase_spec_names, dtype='S64'))
+                                         ('nspecies', 'max_string_length'))
+        emission_name_data = nc.stringtochar(np.array(uppercase_spec_names, dtype='S25'))
         emission_name[:] = emission_name_data
         emission_name.long_name = "emission species name"
         emission_name.standard_name = "emission_name"
         
-        emission_index = ds.createVariable('emission_index', 'f4', ('nspecies',),
-                                         fill_value=np.float32(-9999.9))
-        emission_index_data = np.arange(1, n_species + 1, dtype=np.float32)
+        emission_index = ds.createVariable('emission_index', 'u2', ('nspecies',),
+                                         fill_value=False)
+        emission_index_data = np.arange(1, n_species + 1, dtype=np.uint16)
         emission_index[:] = emission_index_data
         emission_index.long_name = "emission species index"
         emission_index.standard_name = "emission_index"
         
         emission_values = ds.createVariable('emission_values', 'f4', 
                                           ('time', 'z', 'y', 'x', 'nspecies'),
-                                          fill_value=np.float32(-9999.9))
+                                          fill_value=np.float32(-9999.0))
         emission_values.long_name = "emission species values"
         emission_values.standard_name = "emission_values"
         emission_values.units = "g/m2/s"
         emission_values.coordinates = "E_UTM N_UTM lon lat"
         emission_values.grid_mapping = "crsUTM: E_UTM N_UTM crsETRS: lon lat"
-        emission_values.missing_value = np.float32(-9999.9)
         emission_values.lod = np.int32(2)
         
-        stack_height = ds.createVariable('emission_stack_height', 'f4', ('y', 'x'),
-                                        fill_value=np.float32(-9999.9))
-        building_mask = static_params['building_height'] > 0
-        stack_height_data = np.full((static_params['ny'], static_params['nx']), 
-                                  np.float32(-9999.9))
-        stack_height_data[building_mask] = static_params['building_height'][building_mask]
-        stack_height[:] = stack_height_data
-        stack_height.long_name = "emission stack height"
-        stack_height.standard_name = "emission_stack_height"
-        stack_height.units = "m"
-        stack_height.coordinates = "E_UTM N_UTM lon lat"
-        stack_height.grid_mapping = "crsUTM: E_UTM N_UTM crsETRS: lon lat"
-        stack_height.missing_value = np.float32(-9999.9)
-        
         print("Processing emissions data...")
-        print("Note: Data pixels < 0 → 0; no-data pixels preserve fill_value (-9999.9)")
+        print("Note: Data pixels < 0 → 0; no-data pixels preserve fill_value (-9999.0)")
         
         for spec_idx, spec_name in enumerate(all_species_to_process):
             # FIX: Check for _tra suffix
@@ -333,10 +323,10 @@ def create_chemistry_driver(static_params):
                   f"-> reading from emission_{base_spec}_temporal.tif")
             
             species_emissions = np.full((n_time, static_params['ny'], static_params['nx']), 
-                                       np.float32(-9999.9))
+                                       np.float32(-9999.0))
             
             if spec_name not in all_time_info or not all_time_info[spec_name]:
-                print(f"    WARNING: No time info for {spec_name}, filling with -9999.9")
+                print(f"    WARNING: No time info for {spec_name}, filling with -9999.0")
                 emission_values[:, 0, :, :, spec_idx] = species_emissions
                 continue
             
@@ -350,7 +340,7 @@ def create_chemistry_driver(static_params):
                     continue
                 
                 total_emission = np.full((static_params['ny'], static_params['nx']), 
-                                       np.float32(-9999.9))
+                                       np.float32(-9999.0))
                 
                 bands = time_info[date_key][hour_key]
                 for band in bands:
@@ -362,7 +352,7 @@ def create_chemistry_driver(static_params):
                     )
                     
                     valid_mask = ~np.isnan(arr)
-                    fill_mask = (total_emission == np.float32(-9999.9)) & valid_mask
+                    fill_mask = (total_emission == np.float32(-9999.0)) & valid_mask
                     add_mask = valid_mask & ~fill_mask
                     
                     arr_g_per_sec = arr * (1000.0 / 3600.0)
@@ -371,7 +361,7 @@ def create_chemistry_driver(static_params):
                     total_emission[add_mask] += arr_g_per_sec[add_mask]
                 
                 # Identify pixels that never received any sector data
-                nodata_mask = (total_emission == np.float32(-9999.9))
+                nodata_mask = (total_emission == np.float32(-9999.0))
                 filtered_emission = filter_negative_and_zero_values(total_emission, fill_mask=nodata_mask)
                 species_emissions[ts_idx] = filtered_emission
             

@@ -35,10 +35,6 @@ def extract_static_parameters(static_file):
         params['origin_lat'] = ncs.getncattr('origin_lat')
         params['origin_lon'] = ncs.getncattr('origin_lon')
         
-        # Convert center point to UTM coordinates
-        center_x, center_y = transformer_to_utm.transform(
-            params['origin_lon'], params['origin_lat'])
-        
         # Get grid dimensions and resolution
         params['nx'] = ncs.dimensions['x'].size
         params['ny'] = ncs.dimensions['y'].size
@@ -59,14 +55,34 @@ def extract_static_parameters(static_file):
         else:
             params['building_height'] = np.zeros((params['ny'], params['nx']), dtype=np.float32)
         
-        # Calculate domain boundaries
-        half_nx = (params['nx'] - 1) * params['dx'] / 2
-        half_ny = (params['ny'] - 1) * params['dy'] / 2
+        # Absolute UTM coordinates that the (relative) x/y arrays are referenced
+        # to.  Prefer the static file's origin_x / origin_y attributes; fall back
+        # to transforming origin_lon/origin_lat if they are absent.
+        try:
+            origin_x_abs = ncs.getncattr('origin_x')
+        except AttributeError:
+            origin_x_abs, _ = transformer_to_utm.transform(
+                params['origin_lon'], params['origin_lat'])
+        try:
+            origin_y_abs = ncs.getncattr('origin_y')
+        except AttributeError:
+            _, origin_y_abs = transformer_to_utm.transform(
+                params['origin_lon'], params['origin_lat'])
         
-        params['west'] = float(center_x - half_nx)
-        params['east'] = float(center_x + half_nx)
-        params['south'] = float(center_y - half_ny)
-        params['north'] = float(center_y + half_ny)
+        # Derive the domain bounds from the actual grid coordinates (x/y are the
+        # cell-CENTRE offsets from the origin).  This keeps the GDAL Warp window
+        # aligned with the PALM grid even when x/y start at 0 or at dx/2.  (The
+        # previous code assumed x/y were centred on the origin point, which is
+        # off by ~half the domain for the 128x128 statics -> emissions landed in
+        # the wrong quadrant.)
+        params['west']  = float(origin_x_abs + x_coords[0]  - params['dx'] / 2.0)
+        params['east']  = float(origin_x_abs + x_coords[-1] + params['dx'] / 2.0)
+        if y_coords[-1] >= y_coords[0]:      # y increasing northwards
+            params['south'] = float(origin_y_abs + y_coords[0]  - params['dy'] / 2.0)
+            params['north'] = float(origin_y_abs + y_coords[-1] + params['dy'] / 2.0)
+        else:                                 # y decreasing (south first)
+            params['south'] = float(origin_y_abs + y_coords[-1] - params['dy'] / 2.0)
+            params['north'] = float(origin_y_abs + y_coords[0]  + params['dy'] / 2.0)
         
         params['origin_x'] = params['west']
         params['origin_y'] = params['north']
