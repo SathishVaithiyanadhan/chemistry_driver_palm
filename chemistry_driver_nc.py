@@ -120,12 +120,12 @@ def create_chemistry_driver(static_params):
         print("Zero/negative value filtering: ENABLED (all values < 0 will be set to 0)")
     
     species_mapping = {
-        'n2o': 'N2O', 'nox': 'NOX', 'nmvoc': 'RH', 'so4': 'H2SO4', 'co': 'CO',
+        'n2o': 'N2O', 'nox': 'NOX', 'nmvoc': 'RH', 'so4': 'SO4', 'h2so4': 'H2SO4', 'co': 'CO',
         'pm10': 'PM10', 'pm2_5': 'PM25', 'nh3': 'NH3', 'pb': 'PB', 'cd': 'CD',
         'hg': 'HG', 'as': 'AS', 'ni': 'NI', 'bc': 'BC', 'co2': 'CO2', 'ch4': 'CH4',
         'no': 'NO', 'no2': 'NO2', 'ec': 'EC', 'na': 'NA', 'so2': 'SO2', 'ocnv': 'OCNV',
         'othmin': 'OTHMIN', 'o3': 'O3', 'hno3': 'HNO3', 'rcho': 'RCHO', 'ho2': 'HO2',
-        'ro2': 'RO2', 'oh': 'OH', 'h2o': 'H2O', 'ocsv': 'OCSV'
+        'ro2': 'RO2', 'oh': 'OH', 'h2o': 'H2O', 'ocsv': 'OCSV', 'no2_x': 'NO2_x',
     }
     
     all_species_to_process = list(spec_name_str)

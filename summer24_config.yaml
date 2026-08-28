@@ -1,0 +1,61 @@
+# =============================================================================
+# Chemistry Driver Configuration
+# =============================================================================
+# Edit this file for different scenarios. Usage:
+#   python chemistry_driver_main.py chem_config.yaml
+
+# ---- Data Paths ----
+paths:
+  emis_geotiff_pth: "/hpc/gpfs2/home/u/vaithisa/UniA/Downscale_Emissions_simple/Downscale_10m_3days/"
+  static_pth: "/hpc/gpfs2/scratch/u/vaithisa/palm_25.10/palm_mbees/palm/JOBS/Salsa_tra/INPUT/"
+  static: "Salsa_tra_static"
+
+# ---- Time Period ----
+time:
+  start_date: "2024-08-25 00:00:00"
+  end_date: "2024-08-25 23:00:00"
+
+# ---- Traffic Separation ----
+# Traffic species (ending with _tra) are automatically separated when included
+# in the species list below. This section just controls which GNFR sectors
+# are treated as "traffic" for filtering purposes.
+traffic_sectors: ["F_RoadTransport"]
+
+# ---- Active Emission Categories ----
+# These sectors will be read from the GeoTIFF files
+active_categories:
+  - "A_PublicPower"
+  - "B_Industry"
+  - "C_OtherStationaryComb"
+  - "D_Fugitives"
+  - "E_Solvents"
+  - "F_RoadTransport"      # uncomment to include traffic in general categories
+  - "G_Shipping"
+  - "H_Aviation"
+  - "I_OffRoad"
+  - "J_Waste"
+  - "K_AgriLivestock"
+  - "L_AgriOther"
+
+# ---- Species List (comma-separated, order must match PALM chemistry mechanism) ----
+# Full list for salsa+simple_tra (34 species):
+
+species: ["nh3","ocnv","oh_tra","o3_tra","ho2_tra","nh3_tra","ocnv_tra","pm10","pm2_5",
+           "pm10_tra","pm2_5_tra","hno3","h2so4","ocsv","hno3_tra","h2so4_tra","so2_tra",
+           "ocsv_tra","rcho_tra","ro2_tra","nmvoc_tra","nmvoc","so2","rcho","no2_tra",
+           "no2_x_tra","no_tra","o3","ro2","no2","oh","no","ho2","h2o"]
+         
+# =============================================================================
+# Alternative Mechanism Configurations (copy the section above and replace species)
+# =============================================================================
+# Full list matching salsa+simple_tra mechanism (32 species in mechanism order)
+# species: ['pm2_5',]  # passive mechanism
+# species: ['pm10','no', 'no2', 'o3']   # phstatp mechanism
+# species: ['hno3', 'rcho', 'nmvoc', 'ho2', 'no2', 'ro2', 'no2_traffic', 'no_traffic', 'oh', 'o3', 'no', 'h2o']  #simple_traffic
+#species: ['so2', 'nh3', 'oc', 'hno3','rcho','nmvoc', 'no2', 'no2_traffic', 'ho2','o3', 'no_traffic', 'no', 'oh', 'ro2', 'h2o'] #salsa+simple_tra
+#species: ['hno3', 'rcho', 'nmvoc', 'ho2', 'ro2', 'oh', 'no2',  'o3', 'no', 'h2o']  #simple
+#species: ['so4', 'nh3', 'ocnv', 'ocsv', 'pm10','pm2_5', 'pm10_tra', 'pm2_5_tra', 'hno3','rcho','nmvoc', 'no2_tra', 'ho2','ro2', 'no_tra', 'oh', 'o3', 'no', 'no2', 'h2o'] # simple+salsa_tra mechanism
+#species: ['so4', 'nh3', 'ocnv', 'ocsv', 'hno3','rcho','nmvoc','o3', 'oh', 'no2', 'no', 'ho2','ro2', 'h2o'] # simple+salsa mechanism
+#species: ['so4', 'nh3', 'ocnv', 'ocsv', 'so4_tra', 'nh3_tra', 'ocnv_tra', 'ocsv_tra', 'pm10', 'pm2_5', 'pm10_tra', 'pm2_5_tra', 'hno3', 'rcho', 
+                 #'h2o_tra', 'rcho_tra', 'hno3_tra', 'nmvoc', 'nmvoc_tra', 'ro2_tra', 'ro2', 'o3', 'no2', 'no', 
+                 #'oh', 'ho2', 'ho2_tra', 'oh_tra', 'no2_tra', 'no_tra', 'o3_tra', 'h2o']  # simple+salsa_tra mechanism (32 species, full mechanism order)
