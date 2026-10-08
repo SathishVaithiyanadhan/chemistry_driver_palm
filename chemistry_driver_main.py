@@ -71,10 +71,7 @@ def extract_static_parameters(static_file):
         
         # Derive the domain bounds from the actual grid coordinates (x/y are the
         # cell-CENTRE offsets from the origin).  This keeps the GDAL Warp window
-        # aligned with the PALM grid even when x/y start at 0 or at dx/2.  (The
-        # previous code assumed x/y were centred on the origin point, which is
-        # off by ~half the domain for the 128x128 statics -> emissions landed in
-        # the wrong quadrant.)
+        # aligned with the PALM grid even when x/y start at 0 or at dx/2.  
         params['west']  = float(origin_x_abs + x_coords[0]  - params['dx'] / 2.0)
         params['east']  = float(origin_x_abs + x_coords[-1] + params['dx'] / 2.0)
         if y_coords[-1] >= y_coords[0]:      # y increasing northwards

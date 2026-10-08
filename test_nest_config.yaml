@@ -6,14 +6,14 @@
 
 # ---- Data Paths ----
 paths:
-  emis_geotiff_pth: "/hpc/gpfs2/home/u/vaithisa/UniA/Downscale_Emissions_simple/Downscale_10m_3days/"
-  static_pth: "/hpc/gpfs2/scratch/u/vaithisa/palm_25.10/palm_mbees/palm/JOBS/Salsa_tra/INPUT/"
-  static: "Salsa_tra_static"
+  emis_geotiff_pth: "/hpc/gpfs2/home/u/vaithisa/UniA/Downscale_Emissions_simple/Downscaled_Augsburg_city_10m/"   #Downscaled_Augsburg_Admin_100m/  Downscaled_Augsburg_city_10m
+  static_pth: "/hpc/gpfs2/scratch/u/vaithisa/palm_25.10/palm_mbees/palm/JOBS/nest_128/INPUT/"
+  static: "nest_128_static_N02"
 
 # ---- Time Period ----
 time:
-  start_date: "2024-08-25 00:00:00"
-  end_date: "2024-08-25 23:00:00"
+  start_date: "2024-08-19 00:00:00"
+  end_date: "2024-08-19 23:00:00"
 
 # ---- Traffic Separation ----
 # Traffic species (ending with _tra) are automatically separated when included
@@ -29,7 +29,7 @@ active_categories:
   - "C_OtherStationaryComb"
   - "D_Fugitives"
   - "E_Solvents"
-  - "F_RoadTransport"      # uncomment to include traffic in general categories
+  - "F_RoadTransport"     
   - "G_Shipping"
   - "H_Aviation"
   - "I_OffRoad"
